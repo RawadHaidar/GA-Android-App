@@ -1,34 +1,21 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 
 class DataProvider with ChangeNotifier {
-  bool isGenerating = false;
   WebSocketChannel? _channel;
+  bool isConnected = false; // Track WebSocket connection status
+  String? errorMessage; // Store error message if any
+  Timer? _heartbeatTimer; // Timer for heartbeat checks
+  Timer? _reconnectTimer; // Timer for reconnection attempts
 
-  // Callback to notify when new data is received
   void Function(double, double, double, double, double, double, String)?
       onNewData;
 
-  void startGeneratingData() {
-    if (isGenerating) return;
-
-    isGenerating = true;
-    _connectToWebSocket();
-
-    print('Started generating data');
-  }
-
-  void stopGeneratingData() {
-    if (!isGenerating) return;
-
-    isGenerating = false;
-    _channel?.sink.close(1000); // Gracefully close the WebSocket connection
-    _channel = null;
-    notifyListeners();
-
-    print('Stopped generating data');
+  DataProvider() {
+    _connectToWebSocket(); // Start WebSocket connection automatically
   }
 
   void _connectToWebSocket() {
@@ -38,19 +25,57 @@ class DataProvider with ChangeNotifier {
 
     _channel?.stream.listen(
       (message) {
-        if (isGenerating) {
-          _updateSensorData(message);
-        }
+        isConnected = true;
+        errorMessage = null; // Clear error message on successful connection
+        _startHeartbeat(); // Start heartbeat after successful connection
+        _updateSensorData(message);
+        notifyListeners();
       },
       onDone: () {
-        print('WebSocket connection closed');
-        _channel = null;
+        _handleDisconnection('Device disconnected. Attempting to reconnect...');
       },
       onError: (error) {
-        print('WebSocket error: $error');
-        _channel = null;
+        _handleDisconnection(
+            'WebSocket error: $error. Attempting to reconnect...');
       },
     );
+  }
+
+  void _handleDisconnection(String message) {
+    isConnected = false;
+    errorMessage = message;
+    notifyListeners();
+
+    _stopHeartbeat(); // Stop heartbeat when disconnected
+    _attemptReconnect(); // Try reconnecting
+    print(message);
+  }
+
+  void _attemptReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(const Duration(seconds: 2), () {
+      if (!isConnected) {
+        print('Reconnecting to WebSocket...');
+        _connectToWebSocket();
+      }
+    });
+  }
+
+  void _startHeartbeat() {
+    _stopHeartbeat(); // Stop any existing heartbeat
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      try {
+        _channel?.sink.add(jsonEncode({'type': 'ping'}));
+        print('Heartbeat sent');
+      } catch (e) {
+        _handleDisconnection(
+            'Heartbeat failed: $e. Attempting to reconnect...');
+      }
+    });
+  }
+
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
   }
 
   void _updateSensorData(String message) {
@@ -63,8 +88,7 @@ class DataProvider with ChangeNotifier {
       final double? rx = data['rotationX']?.toDouble();
       final double? ry = data['rotationY']?.toDouble();
       final double? rz = data['rotationZ']?.toDouble();
-      final String? serialNumber =
-          data['serialNumber']; // Extract serial number
+      final String? serialNumber = data['serialNumber'];
 
       if (ax != null &&
           ay != null &&
@@ -83,7 +107,9 @@ class DataProvider with ChangeNotifier {
 
   @override
   void dispose() {
-    _channel?.sink.close(status.goingAway);
+    _stopHeartbeat(); // Stop the heartbeat timer
+    _reconnectTimer?.cancel(); // Cancel the reconnection timer
+    _channel?.sink.close(status.goingAway); // Close the WebSocket connection
     super.dispose();
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kicare_ml_firebase_server1/activity_ml_data_widget.dart';
+import 'package:kicare_ml_firebase_server1/authScreen.dart';
 import 'package:kicare_ml_firebase_server1/dataprovider.dart';
 import 'package:provider/provider.dart';
 
@@ -15,10 +16,36 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
+    final dataProvider = Provider.of<DataProvider>(context);
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AuthScreen(isSignUp: false),
+                ),
+              );
+            },
+            child: const Text('Sign In', style: TextStyle(color: Colors.white)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AuthScreen(isSignUp: true),
+                ),
+              );
+            },
+            child: const Text('Sign Up', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
       body: Center(
         child: Column(
@@ -26,23 +53,14 @@ class _MyHomePageState extends State<MyHomePage> {
           children: <Widget>[
             const Text('ML model output data below:'),
             ActivityMlDataWidget(),
+            if (dataProvider.errorMessage != null)
+              Text(
+                dataProvider.errorMessage!,
+                style: const TextStyle(
+                    color: Colors.red, fontWeight: FontWeight.bold),
+              )
           ],
         ),
-      ),
-      floatingActionButton: Consumer<DataProvider>(
-        builder: (context, dataProvider, child) {
-          return FloatingActionButton(
-            onPressed: () {
-              if (dataProvider.isGenerating) {
-                dataProvider.stopGeneratingData();
-              } else {
-                dataProvider.startGeneratingData();
-              }
-            },
-            child: Icon(
-                dataProvider.isGenerating ? Icons.pause : Icons.play_arrow),
-          );
-        },
       ),
     );
   }
