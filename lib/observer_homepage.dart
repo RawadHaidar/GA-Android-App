@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class ObserverHomePage extends StatefulWidget {
   const ObserverHomePage({super.key});
@@ -12,12 +13,52 @@ class ObserverHomePage extends StatefulWidget {
 class _ObserverHomePageState extends State<ObserverHomePage> {
   final TextEditingController _serialNumberController = TextEditingController();
   late Stream<DocumentSnapshot<Map<String, dynamic>>> _deviceDataStream;
+  final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  Map<String, dynamic>? _previousData;
 
   @override
   void initState() {
     super.initState();
     _serialNumberController.text = '123456'; // Default serial number
     _initializeStream();
+    _initializeNotifications();
+  }
+
+  /// Initialize the local notifications plugin
+  Future<void> _initializeNotifications() async {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
+      android: initializationSettingsAndroid,
+    );
+
+    await _localNotificationsPlugin.initialize(initializationSettings);
+  }
+
+  /// Send a local notification
+  Future<void> _sendNotification(String title, String body) async {
+    const AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+      'fall_notifications_channel', // Channel ID
+      'Fall Notifications', // Channel name
+      channelDescription: 'Notifications for fall-related events',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+
+    const NotificationDetails notificationDetails =
+        NotificationDetails(android: androidNotificationDetails);
+
+    await _localNotificationsPlugin.show(
+      0, // Notification ID
+      title,
+      body,
+      notificationDetails,
+    );
   }
 
   void _initializeStream() {
@@ -85,6 +126,34 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
                 }
 
                 final data = snapshot.data!.data()!;
+
+                // Compare with previous data to detect changes
+                if (_previousData != null) {
+                  if (_previousData!['falldetected'] != data['falldetected']) {
+                    _sendNotification(
+                      'Fall Detected',
+                      'A fall was detected at ${_formatTimestamp(data['falldetected'])}.',
+                    );
+                  }
+                  if (_previousData!['fallpredicted'] !=
+                      data['fallpredicted']) {
+                    _sendNotification(
+                      'Fall Predicted',
+                      'A fall is predicted at ${_formatTimestamp(data['fallpredicted'])}.',
+                    );
+                  }
+                  if (_previousData!['walkdeterioration'] !=
+                      data['walkdeterioration']) {
+                    _sendNotification(
+                      'Walk Deterioration',
+                      'Walk deterioration detected at ${_formatTimestamp(data['walkdeterioration'])}.',
+                    );
+                  }
+                }
+
+                // Update previous data
+                _previousData = Map<String, dynamic>.from(data);
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -96,7 +165,6 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
                       'Activity: ${data['activity'] ?? 'N/A'}',
                       style: const TextStyle(fontSize: 25),
                     ),
-                    // Text('Timestamp: ${_formatTimestamp(data['timestamp'])}'),
                     Text(
                       'Fall Detected: ${_formatTimestamp(data['falldetected'])}',
                       style: const TextStyle(fontSize: 25),
