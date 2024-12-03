@@ -17,6 +17,8 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
       FlutterLocalNotificationsPlugin();
 
   Map<String, dynamic>? _previousData;
+  Map<String, DateTime> _lastNotificationTimes = {};
+  final Duration _notificationInterval = const Duration(seconds: 3);
 
   @override
   void initState() {
@@ -40,7 +42,18 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
   }
 
   /// Send a local notification
-  Future<void> _sendNotification(String title, String body) async {
+  Future<void> _sendNotification(
+      String title, String body, String eventType) async {
+    final currentTime = DateTime.now();
+    if (_lastNotificationTimes[eventType] != null &&
+        currentTime.difference(_lastNotificationTimes[eventType]!) <
+            _notificationInterval) {
+      return; // Skip notification if within the interval
+    }
+
+    // Update the last notification time
+    _lastNotificationTimes[eventType] = currentTime;
+
     const AndroidNotificationDetails androidNotificationDetails =
         AndroidNotificationDetails(
       'fall_notifications_channel', // Channel ID
@@ -133,6 +146,7 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
                     _sendNotification(
                       'Fall Detected',
                       'A fall was detected at ${_formatTimestamp(data['falldetected'])}.',
+                      'falldetected',
                     );
                   }
                   if (_previousData!['fallpredicted'] !=
@@ -140,6 +154,7 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
                     _sendNotification(
                       'Fall Predicted',
                       'A fall is predicted at ${_formatTimestamp(data['fallpredicted'])}.',
+                      'fallpredicted',
                     );
                   }
                   if (_previousData!['walkdeterioration'] !=
@@ -147,6 +162,7 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
                     _sendNotification(
                       'Walk Deterioration',
                       'Walk deterioration detected at ${_formatTimestamp(data['walkdeterioration'])}.',
+                      'walkdeterioration',
                     );
                   }
                 }
