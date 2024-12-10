@@ -32,31 +32,34 @@ class _AuthScreenState extends State<AuthScreen> {
       appBar: AppBar(
         title: Text(widget.isSignUp ? 'Sign Up' : 'Sign In'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-            ),
-            if (widget.isSignUp)
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               TextField(
-                controller: _serialNumberController,
-                decoration:
-                    const InputDecoration(labelText: 'Device Serial Number'),
+                controller: _emailController,
+                decoration: const InputDecoration(labelText: 'Email'),
               ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _authenticate,
-              child: Text(widget.isSignUp ? 'Sign Up' : 'Sign In'),
-            ),
-          ],
+              TextField(
+                controller: _passwordController,
+                decoration: const InputDecoration(labelText: 'Password'),
+                obscureText: true,
+              ),
+              if (widget.isSignUp)
+                TextField(
+                  controller: _serialNumberController,
+                  decoration:
+                      const InputDecoration(labelText: 'Device Serial Number'),
+                ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _authenticate,
+                child: Text(widget.isSignUp ? 'Sign Up' : 'Sign In'),
+              ),
+            ],
+          ),
         ),
       ),
     );

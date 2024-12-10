@@ -12,91 +12,100 @@ class ObserverHomePage extends StatefulWidget {
 
 class _ObserverHomePageState extends State<ObserverHomePage> {
   final TextEditingController _serialNumberController = TextEditingController();
-  late Stream<DocumentSnapshot<Map<String, dynamic>>> _deviceDataStream;
-  final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
+  final List<String> _serialNumbers = [];
+  final List<Map<String, String>> _notifications = [];
+  final Map<String, Map<String, dynamic>?> _previousData = {};
 
-  Map<String, dynamic>? _previousData;
-  Map<String, DateTime> _lastNotificationTimes = {};
-  final Duration _notificationInterval = const Duration(seconds: 3);
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
 
   @override
   void initState() {
     super.initState();
-    _serialNumberController.text = '123456'; // Default serial number
-    _initializeStream();
     _initializeNotifications();
   }
 
-  /// Initialize the local notifications plugin
-  Future<void> _initializeNotifications() async {
-    const AndroidInitializationSettings initializationSettingsAndroid =
+  /// Initialize Flutter Local Notifications
+  void _initializeNotifications() {
+    const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const InitializationSettings initializationSettings =
-        InitializationSettings(
-      android: initializationSettingsAndroid,
-    );
-
-    await _localNotificationsPlugin.initialize(initializationSettings);
+    const initializationSettings =
+        InitializationSettings(android: androidSettings);
+    _localNotifications.initialize(initializationSettings);
   }
 
-  /// Send a local notification
-  Future<void> _sendNotification(
-      String title, String body, String eventType) async {
-    final currentTime = DateTime.now();
-    if (_lastNotificationTimes[eventType] != null &&
-        currentTime.difference(_lastNotificationTimes[eventType]!) <
-            _notificationInterval) {
-      return; // Skip notification if within the interval
-    }
-
-    // Update the last notification time
-    _lastNotificationTimes[eventType] = currentTime;
-
-    const AndroidNotificationDetails androidNotificationDetails =
-        AndroidNotificationDetails(
-      'fall_notifications_channel', // Channel ID
-      'Fall Notifications', // Channel name
-      channelDescription: 'Notifications for fall-related events',
-      importance: Importance.high,
+  /// Show a local notification
+  Future<void> _showNotification(String title, String body) async {
+    const androidDetails = AndroidNotificationDetails(
+      'fall_notifications_channel',
+      'Fall Notifications',
+      channelDescription: 'Notifications for fall detections and predictions',
+      importance: Importance.max,
       priority: Priority.high,
     );
-
-    const NotificationDetails notificationDetails =
-        NotificationDetails(android: androidNotificationDetails);
-
-    await _localNotificationsPlugin.show(
-      0, // Notification ID
+    const notificationDetails = NotificationDetails(android: androidDetails);
+    await _localNotifications.show(
+      0,
       title,
       body,
       notificationDetails,
     );
   }
 
-  void _initializeStream() {
-    setState(() {
-      _deviceDataStream = FirebaseFirestore.instance
-          .collection('devices')
-          .doc(_serialNumberController.text)
-          .snapshots();
-    });
-  }
-
-  void _updateSerialNumber() {
-    _initializeStream();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content:
-            Text('Serial Number updated to: ${_serialNumberController.text}'),
-      ),
-    );
-  }
-
+  /// Format Firestore Timestamp into readable string
   String _formatTimestamp(Timestamp? timestamp) {
     if (timestamp == null) return 'N/A';
     final dateTime = timestamp.toDate();
-    return DateFormat('MMMM dd, yyyy \'at\' hh:mm:ss a z').format(dateTime);
+    return DateFormat('MMMM dd, yyyy hh:mm:ss a').format(dateTime);
+  }
+
+  /// Remove a serial number
+  void _removeSerialNumber(String serialNumber) {
+    setState(() {
+      _serialNumbers.remove(serialNumber);
+      _previousData.remove(serialNumber);
+    });
+  }
+
+  /// Add a new serial number
+  void _addSerialNumber() {
+    final serialNumber = _serialNumberController.text.trim();
+    if (serialNumber.isNotEmpty && !_serialNumbers.contains(serialNumber)) {
+      setState(() {
+        _serialNumbers.add(serialNumber);
+      });
+      _serialNumberController.clear();
+    }
+  }
+
+  /// Check for changes and add notifications
+  void _checkForNotifications(String serialNumber, Map<String, dynamic> data) {
+    final previous = _previousData[serialNumber];
+    if (previous != null) {
+      if (previous['falldetected'] != data['falldetected'] &&
+          data['falldetected'] != null) {
+        final notification = {
+          'serialNumber': serialNumber,
+          'message': 'Fall detected',
+          'time': _formatTimestamp(data['falldetected']),
+        };
+        _notifications.add(notification);
+        _showNotification('Fall Detected',
+            'Serial: $serialNumber at ${notification['time']}');
+      }
+      if (previous['fallpredicted'] != data['fallpredicted'] &&
+          data['fallpredicted'] != null) {
+        final notification = {
+          'serialNumber': serialNumber,
+          'message': 'Fall predicted',
+          'time': _formatTimestamp(data['fallpredicted']),
+        };
+        _notifications.add(notification);
+        _showNotification('Fall Predicted',
+            'Serial: $serialNumber at ${notification['time']}');
+      }
+    }
+    _previousData[serialNumber] = Map<String, dynamic>.from(data);
   }
 
   @override
@@ -104,102 +113,158 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Observer Home Page'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      NotificationsPage(notifications: _notifications),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Current Serial Number:'),
-            TextField(
-              controller: _serialNumberController,
-              decoration: const InputDecoration(
-                labelText: 'Serial Number',
-                border: OutlineInputBorder(),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _serialNumberController,
+                    decoration: const InputDecoration(
+                      labelText: 'Serial Number',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _addSerialNumber,
+                  child: const Text('Add'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _serialNumbers.length,
+                itemBuilder: (context, index) {
+                  final serialNumber = _serialNumbers[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: StreamBuilder<
+                                DocumentSnapshot<Map<String, dynamic>>>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('devices')
+                                  .doc(serialNumber)
+                                  .snapshots(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Center(
+                                      child: CircularProgressIndicator());
+                                }
+
+                                if (!snapshot.hasData ||
+                                    !snapshot.data!.exists) {
+                                  return Text(
+                                    'No data available for Serial Number: $serialNumber',
+                                    style: const TextStyle(fontSize: 18),
+                                  );
+                                }
+
+                                final data = snapshot.data!.data()!;
+                                _checkForNotifications(serialNumber, data);
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Serial Number: ${data['serialNumber'] ?? 'N/A'}',
+                                      style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      'Last update time: ${_formatTimestamp(data['timestamp'])}',
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
+                                    Text(
+                                      'Activity: ${data['activity'] ?? 'N/A'}',
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
+                                    Text(
+                                      'Fall Detected: ${_formatTimestamp(data['falldetected'])}',
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
+                                    Text(
+                                      'Fall Predicted: ${_formatTimestamp(data['fallpredicted'])}',
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
+                                    Text(
+                                      'Walk Deterioration: ${_formatTimestamp(data['walkdeterioration'])}',
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _removeSerialNumber(serialNumber),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
-              onSubmitted: (_) =>
-                  _updateSerialNumber(), // Update the stream when serial number changes
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _updateSerialNumber,
-              child: const Text('Update Serial Number'),
-            ),
-            const SizedBox(height: 20),
-            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              stream: _deviceDataStream,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (!snapshot.hasData || !snapshot.data!.exists) {
-                  return const Text(
-                      'No data available for the selected serial number.');
-                }
-
-                final data = snapshot.data!.data()!;
-
-                // Compare with previous data to detect changes
-                if (_previousData != null) {
-                  if (_previousData!['falldetected'] != data['falldetected']) {
-                    _sendNotification(
-                      'Fall Detected',
-                      'A fall was detected at ${_formatTimestamp(data['falldetected'])}.',
-                      'falldetected',
-                    );
-                  }
-                  if (_previousData!['fallpredicted'] !=
-                      data['fallpredicted']) {
-                    _sendNotification(
-                      'Fall Predicted',
-                      'A fall is predicted at ${_formatTimestamp(data['fallpredicted'])}.',
-                      'fallpredicted',
-                    );
-                  }
-                  if (_previousData!['walkdeterioration'] !=
-                      data['walkdeterioration']) {
-                    _sendNotification(
-                      'Walk Deterioration',
-                      'Walk deterioration detected at ${_formatTimestamp(data['walkdeterioration'])}.',
-                      'walkdeterioration',
-                    );
-                  }
-                }
-
-                // Update previous data
-                _previousData = Map<String, dynamic>.from(data);
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Serial Number: ${data['serialNumber'] ?? 'N/A'}',
-                      style: const TextStyle(fontSize: 25),
-                    ),
-                    Text(
-                      'Activity: ${data['activity'] ?? 'N/A'}',
-                      style: const TextStyle(fontSize: 25),
-                    ),
-                    Text(
-                      'Fall Detected: ${_formatTimestamp(data['falldetected'])}',
-                      style: const TextStyle(fontSize: 25),
-                    ),
-                    Text(
-                      'Fall Predicted: ${_formatTimestamp(data['fallpredicted'])}',
-                      style: const TextStyle(fontSize: 25),
-                    ),
-                    Text(
-                      'Walk Deterioration: ${_formatTimestamp(data['walkdeterioration'])}',
-                      style: const TextStyle(fontSize: 25),
-                    ),
-                  ],
-                );
-              },
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class NotificationsPage extends StatelessWidget {
+  final List<Map<String, String>> notifications;
+
+  const NotificationsPage({super.key, required this.notifications});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Notifications'),
+      ),
+      body: notifications.isEmpty
+          ? const Center(child: Text('No notifications yet.'))
+          : ListView.builder(
+              itemCount: notifications.length,
+              itemBuilder: (context, index) {
+                final notification = notifications[index];
+                return ListTile(
+                  leading: const Icon(Icons.notification_important),
+                  title: Text(notification['message']!),
+                  subtitle: Text(
+                    'Serial Number: ${notification['serialNumber']}\nTime: ${notification['time']}',
+                  ),
+                );
+              },
+            ),
     );
   }
 }
