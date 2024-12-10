@@ -20,6 +20,8 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
   late FirebaseDataProvider _firebaseDataProvider;
 
   List<List<double>> _inputBuffer = [];
+  final TextEditingController _ipController =
+      TextEditingController(); // Text field controller
 
   @override
   void initState() {
@@ -43,6 +45,22 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
         _output = 'Error loading model';
       });
     }
+  }
+
+  void _updateIpAddress() {
+    final ip = _ipController.text.trim();
+    if (ip.isNotEmpty) {
+      _dataProvider.setIpAddress(ip);
+    }
+  }
+
+  void _disconnectFromServer() {
+    _dataProvider.disconnect();
+    setState(() {
+      _serialNumber = 'N/A';
+      output_string = 'Disconnected';
+      _output = 'Disconnected from WebSocket';
+    });
   }
 
   void _bufferData(double ax, double ay, double az, double rx, double ry,
@@ -160,16 +178,64 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
   @override
   void dispose() {
     _interpreter?.close();
+    _ipController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      _isLoading
-          ? 'Loading model...'
-          : 'Serialnumber: $_serialNumber\nActivity: $output_string',
-      style: TextStyle(fontSize: 30),
+    return Column(
+      children: [
+        SizedBox(height: 10),
+        // Wrap Row in a SingleChildScrollView to handle overflow
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal, // Allow horizontal scrolling
+          child: Container(
+            constraints: BoxConstraints(maxWidth: 700),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Use Expanded to make sure the TextField gets enough space
+                Expanded(
+                  child: TextField(
+                    controller: _ipController,
+                    decoration: InputDecoration(
+                      labelText: 'Enter IP Address',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.text,
+                  ),
+                ),
+                SizedBox(width: 10), // Space between the buttons
+                Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: _updateIpAddress,
+                      child: Text('Connect to IP'),
+                    ),
+                    SizedBox(width: 10), // Space between buttons
+                    ElevatedButton(
+                      onPressed: _disconnectFromServer,
+                      child: Text('Disconnect   '),
+                    ),
+                  ],
+                ),
+
+                SizedBox(height: 10),
+                Text(
+                  _isLoading
+                      ? 'Loading model...'
+                      : 'Serialnumber: $_serialNumber\nActivity: $output_string',
+                  style: TextStyle(fontSize: 20),
+                  textAlign: TextAlign.start,
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 20),
+      ],
     );
   }
 }

@@ -47,19 +47,25 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('ML model output data below:'),
-            ActivityMlDataWidget(),
-            if (dataProvider.errorMessage != null)
-              Text(
-                dataProvider.errorMessage!,
-                style: const TextStyle(
-                    color: Colors.red, fontWeight: FontWeight.bold),
-              )
-          ],
+      body: SingleChildScrollView(
+        // Wrap the body content in a scroll view
+        child: Padding(
+          padding:
+              const EdgeInsets.all(16.0), // Optional padding around the content
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text('ML model output data below:'),
+              ActivityMlDataWidget(),
+              if (dataProvider.errorMessage != null)
+                Text(
+                  dataProvider.errorMessage!,
+                  style: const TextStyle(
+                      color: Colors.red, fontWeight: FontWeight.bold),
+                )
+            ],
+          ),
         ),
       ),
     );

@@ -10,18 +10,29 @@ class DataProvider with ChangeNotifier {
   String? errorMessage; // Store error message if any
   Timer? _heartbeatTimer; // Timer for heartbeat checks
   Timer? _reconnectTimer; // Timer for reconnection attempts
+  String? ipAddress; // Store the dynamically set IP address
+  bool _manualDisconnect = false; // Track if disconnect was manual
 
   void Function(double, double, double, double, double, double, String)?
       onNewData;
 
-  DataProvider() {
-    _connectToWebSocket(); // Start WebSocket connection automatically
+  DataProvider();
+
+  void setIpAddress(String newIpAddress) {
+    ipAddress = newIpAddress;
+    _manualDisconnect = false; // Reset flag for new connection attempts
+    _connectToWebSocket(); // Connect to the new IP address
   }
 
   void _connectToWebSocket() {
-    _channel = WebSocketChannel.connect(
-      Uri.parse('ws://192.168.0.155:81'),
-    );
+    if (ipAddress == null || ipAddress!.isEmpty) {
+      errorMessage = "IP address is not set.";
+      notifyListeners();
+      return;
+    }
+
+    final uri = Uri.parse('ws://$ipAddress:81');
+    _channel = WebSocketChannel.connect(uri);
 
     _channel?.stream.listen(
       (message) {
@@ -32,13 +43,27 @@ class DataProvider with ChangeNotifier {
         notifyListeners();
       },
       onDone: () {
-        _handleDisconnection('Device disconnected. Attempting to reconnect...');
+        if (!_manualDisconnect) {
+          _handleDisconnection(
+              'Device disconnected. Attempting to reconnect...');
+        }
       },
       onError: (error) {
-        _handleDisconnection(
-            'WebSocket error: $error. Attempting to reconnect...');
+        if (!_manualDisconnect) {
+          _handleDisconnection(
+              'WebSocket error: $error. Attempting to reconnect...');
+        }
       },
     );
+  }
+
+  void disconnect() {
+    _manualDisconnect = true; // Set flag to prevent reconnection attempts
+    _channel?.sink.close(status.goingAway);
+    _channel = null;
+    isConnected = false;
+    _stopHeartbeat(); // Stop heartbeat when manually disconnected
+    notifyListeners();
   }
 
   void _handleDisconnection(String message) {
@@ -47,14 +72,18 @@ class DataProvider with ChangeNotifier {
     notifyListeners();
 
     _stopHeartbeat(); // Stop heartbeat when disconnected
-    _attemptReconnect(); // Try reconnecting
+
+    // Attempt reconnect only if not manually disconnected
+    if (!_manualDisconnect) {
+      _attemptReconnect();
+    }
     print(message);
   }
 
   void _attemptReconnect() {
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(const Duration(seconds: 2), () {
-      if (!isConnected) {
+      if (!isConnected && ipAddress != null && !_manualDisconnect) {
         print('Reconnecting to WebSocket...');
         _connectToWebSocket();
       }
@@ -107,6 +136,7 @@ class DataProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    _manualDisconnect = true; // Ensure no reconnection attempts on dispose
     _stopHeartbeat(); // Stop the heartbeat timer
     _reconnectTimer?.cancel(); // Cancel the reconnection timer
     _channel?.sink.close(status.goingAway); // Close the WebSocket connection
