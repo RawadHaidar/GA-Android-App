@@ -137,15 +137,34 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
                 Expanded(
                   child: TextField(
                     controller: _serialNumberController,
-                    decoration: const InputDecoration(
-                      labelText: 'Serial Number',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: 'Enter Serial Number',
+                      hintText: 'e.g., 123456',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: Theme.of(context).primaryColor,
+                          width: 2,
+                        ),
+                      ),
+                      prefixIcon: Icon(
+                        Icons.device_hub,
+                        color: Theme.of(context).primaryColor,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: _addSerialNumber,
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   child: const Text('Add'),
                 ),
               ],
@@ -158,75 +177,68 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
                   final serialNumber = _serialNumbers[index];
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: StreamBuilder<
-                                DocumentSnapshot<Map<String, dynamic>>>(
-                              stream: FirebaseFirestore.instance
-                                  .collection('devices')
-                                  .doc(serialNumber)
-                                  .snapshots(),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return const Center(
-                                      child: CircularProgressIndicator());
-                                }
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 4,
+                    child: ListTile(
+                      title:
+                          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance
+                            .collection('devices')
+                            .doc(serialNumber)
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
 
-                                if (!snapshot.hasData ||
-                                    !snapshot.data!.exists) {
-                                  return Text(
-                                    'No data available for Serial Number: $serialNumber',
-                                    style: const TextStyle(fontSize: 18),
-                                  );
-                                }
+                          if (!snapshot.hasData || !snapshot.data!.exists) {
+                            return Text(
+                              'No data for Serial Number: $serialNumber',
+                              style: const TextStyle(fontSize: 16),
+                            );
+                          }
 
-                                final data = snapshot.data!.data()!;
-                                _checkForNotifications(serialNumber, data);
+                          final data = snapshot.data!.data()!;
+                          _checkForNotifications(serialNumber, data);
 
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Serial Number: ${data['serialNumber'] ?? 'N/A'}',
-                                      style: const TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                    Text(
-                                      'Last update time: ${_formatTimestamp(data['timestamp'])}',
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
-                                    Text(
-                                      'Activity: ${data['activity'] ?? 'N/A'}',
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
-                                    Text(
-                                      'Fall Detected: ${_formatTimestamp(data['falldetected'])}',
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
-                                    Text(
-                                      'Fall Predicted: ${_formatTimestamp(data['fallpredicted'])}',
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
-                                    Text(
-                                      'Walk Deterioration: ${_formatTimestamp(data['walkdeterioration'])}',
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _removeSerialNumber(serialNumber),
-                        ),
-                      ],
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Serial Number: ${data['serialNumber'] ?? 'N/A'}',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                'Last Updated: ${_formatTimestamp(data['timestamp'])}',
+                              ),
+                              Text(
+                                'Activity: ${data['activity']}',
+                              ),
+                              Text(
+                                'Fall Detected: ${_formatTimestamp(data['falldetected'])}',
+                              ),
+                              Text(
+                                'Fall Predicted: ${_formatTimestamp(data['fallpredicted'])}',
+                              ),
+                              Text(
+                                'Walk Deterioration: ${_formatTimestamp(data['walkdeterioration'])}',
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _removeSerialNumber(serialNumber),
+                      ),
                     ),
                   );
                 },
@@ -256,11 +268,14 @@ class NotificationsPage extends StatelessWidget {
               itemCount: notifications.length,
               itemBuilder: (context, index) {
                 final notification = notifications[index];
-                return ListTile(
-                  leading: const Icon(Icons.notification_important),
-                  title: Text(notification['message']!),
-                  subtitle: Text(
-                    'Serial Number: ${notification['serialNumber']}\nTime: ${notification['time']}',
+                return Card(
+                  margin: const EdgeInsets.all(8),
+                  child: ListTile(
+                    leading: const Icon(Icons.notification_important),
+                    title: Text(notification['message']!),
+                    subtitle: Text(
+                      'Serial: ${notification['serialNumber']}\nTime: ${notification['time']}',
+                    ),
                   ),
                 );
               },

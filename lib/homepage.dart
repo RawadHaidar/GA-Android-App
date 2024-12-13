@@ -23,7 +23,7 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
         actions: [
-          TextButton(
+          TextButton.icon(
             onPressed: () {
               Navigator.push(
                 context,
@@ -32,9 +32,10 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               );
             },
-            child: const Text('Sign In', style: TextStyle(color: Colors.white)),
+            icon: const Icon(Icons.login, color: Colors.white),
+            label: const Text('Sign In', style: TextStyle(color: Colors.white)),
           ),
-          TextButton(
+          TextButton.icon(
             onPressed: () {
               Navigator.push(
                 context,
@@ -43,27 +44,55 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               );
             },
-            child: const Text('Sign Up', style: TextStyle(color: Colors.white)),
+            icon: const Icon(Icons.person_add, color: Colors.white),
+            label: const Text('Sign Up', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        // Wrap the body content in a scroll view
-        child: Padding(
-          padding:
-              const EdgeInsets.all(16.0), // Optional padding around the content
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text('ML model output data below:'),
-              ActivityMlDataWidget(),
-              if (dataProvider.errorMessage != null)
-                Text(
-                  dataProvider.errorMessage!,
-                  style: const TextStyle(
-                      color: Colors.red, fontWeight: FontWeight.bold),
-                )
+              Text(
+                'ML Device Data Output',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Displaying real-time data fetched from the device at the specified IP address.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey[700],
+                    ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 4,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ActivityMlDataWidget(),
+                      if (dataProvider.errorMessage != null)
+                        Text(
+                          dataProvider.errorMessage!,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),

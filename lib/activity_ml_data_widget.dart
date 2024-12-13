@@ -200,14 +200,15 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
                 Expanded(
                   child: TextField(
                     controller: _ipController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
+                      hintText: 'e.g., 192.168.0.155',
                       labelText: 'Enter IP Address',
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.text,
                   ),
                 ),
-                SizedBox(width: 10), // Space between the buttons
+                const SizedBox(width: 10), // Space between the buttons
                 Column(
                   children: [
                     ElevatedButton(
@@ -222,11 +223,11 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
                   ],
                 ),
 
-                SizedBox(height: 10),
+                const SizedBox(height: 10),
                 Text(
                   _isLoading
-                      ? 'Loading model...'
-                      : 'Serialnumber: $_serialNumber\nActivity: $output_string',
+                      ? '  Loading model...'
+                      : '  Serialnumber: $_serialNumber\n  Activity: $output_string',
                   style: TextStyle(fontSize: 20),
                   textAlign: TextAlign.start,
                 ),
