@@ -75,22 +75,10 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
                 elevation: 4,
                 child: Container(
+                  // height: 1000,
                   width: double.infinity,
                   padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ActivityMlDataWidget(),
-                      if (dataProvider.errorMessage != null)
-                        Text(
-                          dataProvider.errorMessage!,
-                          style: const TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                    ],
-                  ),
+                  child: ActivityMlDataWidget(),
                 ),
               ),
             ],

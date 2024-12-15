@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:kicare_ml_firebase_server1/ViewNotificationsPage.dart';
 
 class ObserverHomePage extends StatefulWidget {
   const ObserverHomePage({super.key});
@@ -131,7 +132,10 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+                "Type the device serial number to receive its cloud database real-time data."),
             Row(
               children: [
                 Expanded(
@@ -247,39 +251,6 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class NotificationsPage extends StatelessWidget {
-  final List<Map<String, String>> notifications;
-
-  const NotificationsPage({super.key, required this.notifications});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Notifications'),
-      ),
-      body: notifications.isEmpty
-          ? const Center(child: Text('No notifications yet.'))
-          : ListView.builder(
-              itemCount: notifications.length,
-              itemBuilder: (context, index) {
-                final notification = notifications[index];
-                return Card(
-                  margin: const EdgeInsets.all(8),
-                  child: ListTile(
-                    leading: const Icon(Icons.notification_important),
-                    title: Text(notification['message']!),
-                    subtitle: Text(
-                      'Serial: ${notification['serialNumber']}\nTime: ${notification['time']}',
-                    ),
-                  ),
-                );
-              },
-            ),
     );
   }
 }

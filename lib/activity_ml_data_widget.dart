@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:kicare_ml_firebase_server1/firebase_dataprovider.dart';
 import 'package:provider/provider.dart';
-import 'firebase_dataprovider.dart';
-import 'package:tflite_flutter/tflite_flutter.dart';
 import 'dataprovider.dart';
+import 'ml_data_processor.dart';
 
 class ActivityMlDataWidget extends StatefulWidget {
   @override
@@ -10,233 +10,213 @@ class ActivityMlDataWidget extends StatefulWidget {
 }
 
 class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
-  Interpreter? _interpreter;
-  String _output = '';
-  String output_string = '';
-  String _serialNumber = 'N/A';
+  final MlDataProcessor _mlProcessor = MlDataProcessor();
   bool _isLoading = true;
 
-  late DataProvider _dataProvider;
-  late FirebaseDataProvider _firebaseDataProvider;
+  final List<TextEditingController> _ipControllers = [];
+  final List<String> _serialNumbers = [];
+  final List<String> _activityOutputs = [];
 
-  List<List<double>> _inputBuffer = [];
-  final TextEditingController _ipController =
-      TextEditingController(); // Text field controller
-
+  final Set<String> _registeredIps = {}; // Keep track of registered IPs
+  final Map<String, List<List<double>>> _deviceBuffers =
+      {}; // Buffers for each device
   @override
   void initState() {
     super.initState();
-    _loadModel();
-    _dataProvider = Provider.of<DataProvider>(context, listen: false);
-    _firebaseDataProvider = FirebaseDataProvider();
-    _dataProvider.onNewData = _bufferData;
+    _mlProcessor.loadModel().then((_) {
+      setState(() {
+        _isLoading = _mlProcessor.isLoading;
+      });
+    });
   }
 
-  Future<void> _loadModel() async {
-    try {
-      _interpreter = await Interpreter.fromAsset(
-          'assets/models/activity_fall_combined_model.tflite');
-      setState(() {
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _output = 'Error loading model';
-      });
-    }
+  void _addIpContainer() {
+    setState(() {
+      _ipControllers.add(TextEditingController());
+      _serialNumbers.add('N/A');
+      _activityOutputs.add('No activity detected');
+    });
   }
 
-  void _updateIpAddress() {
-    final ip = _ipController.text.trim();
+  void _removeIpContainer(int index) {
+    final ip = _ipControllers[index].text.trim();
     if (ip.isNotEmpty) {
-      _dataProvider.setIpAddress(ip);
+      Provider.of<DataProvider>(context, listen: false).removeIpAddress(ip);
     }
-  }
-
-  void _disconnectFromServer() {
-    _dataProvider.disconnect();
     setState(() {
-      _serialNumber = 'N/A';
-      output_string = 'Disconnected';
-      _output = 'Disconnected from WebSocket';
+      _ipControllers[index].dispose();
+      _ipControllers.removeAt(index);
+      _serialNumbers.removeAt(index);
+      _activityOutputs.removeAt(index);
     });
   }
 
-  void _bufferData(double ax, double ay, double az, double rx, double ry,
-      double rz, String serialNumber) {
-    if (_isLoading || _interpreter == null) {
-      return;
-    }
+  void _connectToIp(int index) {
+    final ip = _ipControllers[index].text.trim();
+    if (ip.isNotEmpty) {
+      final dataProvider = Provider.of<DataProvider>(context, listen: false);
+      //     final firebaseDataProvider =
+      //         FirebaseDataProvider(); // Firebase provider instance
+      //     List<List<double>> sensorBuffer = [];
+      // Check if the IP address is already registered
+      if (!_registeredIps.contains(ip)) {
+        _registeredIps.add(ip); // Add IP to the set
+        dataProvider.addIpAddress(ip); // Register IP with DataProvider
 
-    setState(() {
-      _serialNumber = serialNumber;
-    });
+        // Initialize a data buffer for the device
+        _deviceBuffers[ip] = [];
+      }
 
-    if (_inputBuffer.length >= 6) {
-      _inputBuffer.removeAt(0);
-    }
-    _inputBuffer.add([ax, ay, az, rx, ry, rz]);
+      final firebaseDataProvider =
+          FirebaseDataProvider(); // Firebase provider instance
 
-    if (_inputBuffer.length == 6) {
-      _predictWithData();
+      // Set up the callback for new data
+      dataProvider.onNewData =
+          (ipAddress, ax, ay, az, rx, ry, rz, serial) async {
+        // Handle only the specific IP's data
+        if (_registeredIps.contains(ipAddress)) {
+          // Update UI with serial number
+          if (ipAddress == ip) {
+            setState(() {
+              _serialNumbers[index] = serial;
+            });
+          }
+
+          // Add new sensor data to the buffer
+          final buffer = _deviceBuffers[ipAddress]!;
+          buffer.add([ax, ay, az, rx, ry, rz]);
+
+          // Maintain buffer size at 6 lines
+          if (buffer.length > 6) {
+            buffer.removeAt(0); // Remove the oldest line
+          }
+
+          // If buffer has enough data, predict activity and send to Firestore
+          if (buffer.length == 6) {
+            try {
+              final activity = await _mlProcessor.predictActivity(buffer);
+
+              // Update the UI for the specific IP
+              if (ipAddress == ip) {
+                setState(() {
+                  _activityOutputs[index] = activity;
+                });
+              }
+
+              // Send activity data to Firestore
+              await firebaseDataProvider.sendActivityData(
+                serialNumber: serial,
+                activity: activity,
+              );
+            } catch (e) {
+              if (ipAddress == ip) {
+                setState(() {
+                  _activityOutputs[index] = 'Error: $e';
+                });
+              }
+            }
+          } else {
+            // Collecting data message
+            if (ipAddress == ip) {
+              setState(() {
+                _activityOutputs[index] = 'Collecting data...';
+              });
+            }
+          }
+        }
+      };
     }
   }
 
-  Future<void> _predictWithData() async {
-    if (_interpreter == null) {
-      print('Interpreter is not initialized');
-      return;
+  void _disconnectFromIp(int index) {
+    final ip = _ipControllers[index].text.trim();
+    if (ip.isNotEmpty) {
+      Provider.of<DataProvider>(context, listen: false).removeIpAddress(ip);
     }
-
-    var input = [_inputBuffer];
-    var mean = [
-      0.20843079922027016,
-      0.7102306692657564,
-      0.249322070608623,
-      65.94978124323104,
-      37.685719081654824,
-      21.447627247130217
-    ];
-    var stdDev = [
-      0.26626532547848913,
-      0.37681720681319597,
-      0.38741141730125095,
-      43.94066655893264,
-      59.36033325058816,
-      41.2216565065153
-    ];
-
-    var scaledInput = input.map((batch) {
-      return batch.map((features) {
-        return List<double>.generate(features.length, (index) {
-          return (features[index] - mean[index]) / stdDev[index];
-        }).toList();
-      }).toList();
-    }).toList();
-
-    var output = List<List<double>>.filled(1, List<double>.filled(10, 0.0));
-
-    _interpreter!.run(scaledInput, output);
-
-    var rawOutput = output[0];
-    var predictedClass = rawOutput
-        .asMap()
-        .entries
-        .fold<MapEntry<int, double>>(
-          MapEntry(0, rawOutput[0]),
-          (current, entry) => entry.value > current.value ? entry : current,
-        )
-        .key;
-
-    switch (predictedClass) {
-      case 0:
-        output_string = 'laying';
-        break;
-      case 1:
-        output_string = 'standing still';
-        break;
-      case 2:
-        output_string = 'walking';
-        break;
-      case 3:
-        output_string = 'laying down / sitting up';
-        break;
-      case 4:
-        output_string = 'sitting';
-        break;
-      case 5:
-        output_string = 'sitting down';
-        break;
-      case 6:
-        output_string = 'standing up';
-        break;
-      case 7:
-        output_string = 'fall detected';
-        break;
-      case 8:
-        output_string = 'fall prediction';
-        break;
-      case 9:
-        output_string = 'walk deterioration';
-        break;
-      default:
-        output_string = 'unknown';
-    }
-
     setState(() {
-      _output = 'Predicted Class: $predictedClass';
+      _serialNumbers[index] = 'N/A';
+      _activityOutputs[index] = 'Disconnected';
     });
-
-    // Send data to Firestore
-    await _firebaseDataProvider.sendActivityData(
-      serialNumber: _serialNumber,
-      activity: output_string,
-    );
   }
 
   @override
   void dispose() {
-    _interpreter?.close();
-    _ipController.dispose();
+    for (var controller in _ipControllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(height: 10),
-        // Wrap Row in a SingleChildScrollView to handle overflow
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal, // Allow horizontal scrolling
-          child: Container(
-            constraints: BoxConstraints(maxWidth: 700),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Use Expanded to make sure the TextField gets enough space
-                Expanded(
-                  child: TextField(
-                    controller: _ipController,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g., 192.168.0.155',
-                      labelText: 'Enter IP Address',
-                      border: OutlineInputBorder(),
+    return Container(
+      height: 1000,
+      child: Column(
+        children: [
+          SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: _addIpContainer,
+            child: Text('Add IP Address'),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _ipControllers.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Card(
+                    color: Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Container(
+                        height: 200,
+                        child: Column(
+                          children: [
+                            TextField(
+                              controller: _ipControllers[index],
+                              decoration: const InputDecoration(
+                                hintText: 'e.g., 192.168.0.155',
+                                labelText: 'Enter IP Address',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () => _connectToIp(index),
+                                  child: const Text('Connect'),
+                                ),
+                                SizedBox(width: 10),
+                                ElevatedButton(
+                                  onPressed: () => _disconnectFromIp(index),
+                                  child: Text('Disconnect'),
+                                ),
+                                SizedBox(width: 10),
+                                ElevatedButton(
+                                  onPressed: () => _removeIpContainer(index),
+                                  child: const Text('Remove'),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 10),
+                            Text(
+                              _isLoading
+                                  ? 'Loading model...'
+                                  : 'Serial: ${_serialNumbers[index]}\nActivity: ${_activityOutputs[index]}',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    keyboardType: TextInputType.text,
                   ),
-                ),
-                const SizedBox(width: 10), // Space between the buttons
-                Column(
-                  children: [
-                    ElevatedButton(
-                      onPressed: _updateIpAddress,
-                      child: Text('Connect to IP'),
-                    ),
-                    SizedBox(width: 10), // Space between buttons
-                    ElevatedButton(
-                      onPressed: _disconnectFromServer,
-                      child: Text('Disconnect   '),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 10),
-                Text(
-                  _isLoading
-                      ? '  Loading model...'
-                      : '  Serialnumber: $_serialNumber\n  Activity: $output_string',
-                  style: TextStyle(fontSize: 20),
-                  textAlign: TextAlign.start,
-                ),
-              ],
+                );
+              },
             ),
           ),
-        ),
-        SizedBox(height: 20),
-      ],
+        ],
+      ),
     );
   }
 }

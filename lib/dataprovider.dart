@@ -5,109 +5,113 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 
 class DataProvider with ChangeNotifier {
-  WebSocketChannel? _channel;
-  bool isConnected = false; // Track WebSocket connection status
-  String? errorMessage; // Store error message if any
-  Timer? _heartbeatTimer; // Timer for heartbeat checks
-  Timer? _reconnectTimer; // Timer for reconnection attempts
-  String? ipAddress; // Store the dynamically set IP address
-  bool _manualDisconnect = false; // Track if disconnect was manual
+  final Map<String, WebSocketChannel> _channels =
+      {}; // Store WebSocket channels by IP
+  final Map<String, Timer> _heartbeatTimers =
+      {}; // Store heartbeat timers by IP
+  final Map<String, bool> _connectionStatus =
+      {}; // Track connection status by IP
+  final Map<String, String?> _errorMessages = {}; // Store error messages by IP
+  final Map<String, Timer> _reconnectTimers =
+      {}; // Store reconnect timers by IP
 
-  void Function(double, double, double, double, double, double, String)?
+  void Function(
+          String ip, double, double, double, double, double, double, String)?
       onNewData;
 
   DataProvider();
 
-  void setIpAddress(String newIpAddress) {
-    ipAddress = newIpAddress;
-    _manualDisconnect = false; // Reset flag for new connection attempts
-    _connectToWebSocket(); // Connect to the new IP address
-  }
-
-  void _connectToWebSocket() {
-    if (ipAddress == null || ipAddress!.isEmpty) {
-      errorMessage = "IP address is not set.";
-      notifyListeners();
+  void addIpAddress(String ipAddress) {
+    if (_channels.containsKey(ipAddress)) {
+      print("Already connected to $ipAddress");
       return;
     }
 
-    final uri = Uri.parse('ws://$ipAddress:81');
-    _channel = WebSocketChannel.connect(uri);
+    _connectToWebSocket(ipAddress);
+  }
 
-    _channel?.stream.listen(
+  void removeIpAddress(String ipAddress) {
+    _disconnectWebSocket(ipAddress);
+  }
+
+  void _connectToWebSocket(String ipAddress) {
+    final uri = Uri.parse('ws://$ipAddress:81');
+    final channel = WebSocketChannel.connect(uri);
+    _channels[ipAddress] = channel;
+
+    _connectionStatus[ipAddress] = false; // Initially disconnected
+    _errorMessages[ipAddress] = null;
+
+    channel.stream.listen(
       (message) {
-        isConnected = true;
-        errorMessage = null; // Clear error message on successful connection
-        _startHeartbeat(); // Start heartbeat after successful connection
-        _updateSensorData(message);
+        _connectionStatus[ipAddress] = true;
+        _errorMessages[ipAddress] = null; // Clear error message on success
+        _startHeartbeat(ipAddress); // Start heartbeat for this connection
+        _updateSensorData(ipAddress, message);
         notifyListeners();
       },
       onDone: () {
-        if (!_manualDisconnect) {
-          _handleDisconnection(
-              'Device disconnected. Attempting to reconnect...');
-        }
+        _handleDisconnection(ipAddress, 'Device disconnected.');
       },
       onError: (error) {
-        if (!_manualDisconnect) {
-          _handleDisconnection(
-              'WebSocket error: $error. Attempting to reconnect...');
-        }
+        _handleDisconnection(ipAddress, 'WebSocket error: $error');
       },
     );
   }
 
-  void disconnect() {
-    _manualDisconnect = true; // Set flag to prevent reconnection attempts
-    _channel?.sink.close(status.goingAway);
-    _channel = null;
-    isConnected = false;
-    _stopHeartbeat(); // Stop heartbeat when manually disconnected
+  void _disconnectWebSocket(String ipAddress) {
+    _stopHeartbeat(ipAddress);
+    _reconnectTimers[ipAddress]?.cancel();
+    _channels[ipAddress]?.sink.close(status.goingAway);
+    _channels.remove(ipAddress);
+    _connectionStatus.remove(ipAddress);
+    _errorMessages.remove(ipAddress);
     notifyListeners();
   }
 
-  void _handleDisconnection(String message) {
-    isConnected = false;
-    errorMessage = message;
+  void _handleDisconnection(String ipAddress, String message) {
+    _connectionStatus[ipAddress] = false;
+    _errorMessages[ipAddress] = message;
     notifyListeners();
 
-    _stopHeartbeat(); // Stop heartbeat when disconnected
+    _stopHeartbeat(ipAddress);
 
-    // Attempt reconnect only if not manually disconnected
-    if (!_manualDisconnect) {
-      _attemptReconnect();
+    // Attempt reconnect only if the IP is still in the list
+    if (_channels.containsKey(ipAddress)) {
+      _attemptReconnect(ipAddress);
     }
-    print(message);
+    print('[$ipAddress] $message');
   }
 
-  void _attemptReconnect() {
-    _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 2), () {
-      if (!isConnected && ipAddress != null && !_manualDisconnect) {
-        print('Reconnecting to WebSocket...');
-        _connectToWebSocket();
+  void _attemptReconnect(String ipAddress) {
+    _reconnectTimers[ipAddress]?.cancel();
+    _reconnectTimers[ipAddress] = Timer(const Duration(seconds: 2), () {
+      if (_channels.containsKey(ipAddress) && !_connectionStatus[ipAddress]!) {
+        print('Reconnecting to $ipAddress...');
+        _connectToWebSocket(ipAddress);
       }
     });
   }
 
-  void _startHeartbeat() {
-    _stopHeartbeat(); // Stop any existing heartbeat
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+  void _startHeartbeat(String ipAddress) {
+    _stopHeartbeat(ipAddress);
+    _heartbeatTimers[ipAddress] =
+        Timer.periodic(const Duration(seconds: 3), (timer) {
       try {
-        _channel?.sink.add(jsonEncode({'type': 'ping'}));
-        print('Heartbeat sent');
+        _channels[ipAddress]?.sink.add(jsonEncode({'type': 'ping'}));
+        print('Heartbeat sent to $ipAddress');
       } catch (e) {
-        _handleDisconnection(
-            'Heartbeat failed: $e. Attempting to reconnect...');
+        _handleDisconnection(ipAddress, 'Heartbeat failed: $e');
       }
     });
   }
 
-  void _stopHeartbeat() {
-    _heartbeatTimer?.cancel();
+  void _stopHeartbeat(String ipAddress) {
+    _heartbeatTimers[ipAddress]?.cancel();
+    _heartbeatTimers.remove(ipAddress);
   }
 
-  void _updateSensorData(String message) {
+  void _updateSensorData(String ipAddress, String message) {
     try {
       final Map<String, dynamic> data = jsonDecode(message);
 
@@ -126,20 +130,21 @@ class DataProvider with ChangeNotifier {
           ry != null &&
           rz != null &&
           serialNumber != null) {
-        onNewData?.call(ax, ay, az, rx, ry, rz, serialNumber);
+        onNewData?.call(ipAddress, ax, ay, az, rx, ry, rz, serialNumber);
       }
-      print('$ax,$ay,$az,$rx,$ry,$rz, Serial: $serialNumber');
+      print('[$ipAddress] $ax,$ay,$az,$rx,$ry,$rz, Serial: $serialNumber');
     } catch (e) {
-      print('Error parsing sensor data: $e');
+      print('[$ipAddress] Error parsing sensor data: $e');
     }
   }
 
+  bool isConnected(String ipAddress) => _connectionStatus[ipAddress] ?? false;
+
+  String? getErrorMessage(String ipAddress) => _errorMessages[ipAddress];
+
   @override
   void dispose() {
-    _manualDisconnect = true; // Ensure no reconnection attempts on dispose
-    _stopHeartbeat(); // Stop the heartbeat timer
-    _reconnectTimer?.cancel(); // Cancel the reconnection timer
-    _channel?.sink.close(status.goingAway); // Close the WebSocket connection
+    _channels.keys.toList().forEach(removeIpAddress); // Disconnect all IPs
     super.dispose();
   }
 }
