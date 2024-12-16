@@ -72,20 +72,17 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
       final firebaseDataProvider =
           FirebaseDataProvider(); // Firebase provider instance
 
-      // Set up the callback for new data
-      dataProvider.onNewData =
-          (ipAddress, ax, ay, az, rx, ry, rz, serial) async {
-        // Handle only the specific IP's data
-        if (_registeredIps.contains(ipAddress)) {
+// Set up the callback for this specific IP
+      dataProvider.setDeviceCallback(
+        ip,
+        (ip, ax, ay, az, rx, ry, rz, serial) async {
           // Update UI with serial number
-          if (ipAddress == ip) {
-            setState(() {
-              _serialNumbers[index] = serial;
-            });
-          }
+          setState(() {
+            _serialNumbers[index] = serial;
+          });
 
           // Add new sensor data to the buffer
-          final buffer = _deviceBuffers[ipAddress]!;
+          final buffer = _deviceBuffers[ip]!;
           buffer.add([ax, ay, az, rx, ry, rz]);
 
           // Maintain buffer size at 6 lines
@@ -99,11 +96,9 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
               final activity = await _mlProcessor.predictActivity(buffer);
 
               // Update the UI for the specific IP
-              if (ipAddress == ip) {
-                setState(() {
-                  _activityOutputs[index] = activity;
-                });
-              }
+              setState(() {
+                _activityOutputs[index] = activity;
+              });
 
               // Send activity data to Firestore
               await firebaseDataProvider.sendActivityData(
@@ -111,24 +106,19 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
                 activity: activity,
               );
             } catch (e) {
-              dataProvider.setLatestError(ipAddress, e.toString());
-
-              if (ipAddress == ip) {
-                setState(() {
-                  _activityOutputs[index] = 'Error: $e';
-                });
-              }
+              dataProvider.setLatestError(ip, e.toString());
+              setState(() {
+                _activityOutputs[index] = 'Error: $e';
+              });
             }
           } else {
             // Collecting data message
-            if (ipAddress == ip) {
-              setState(() {
-                _activityOutputs[index] = 'Collecting data...';
-              });
-            }
+            setState(() {
+              _activityOutputs[index] = 'Collecting data...';
+            });
           }
-        }
-      };
+        },
+      );
     }
   }
 

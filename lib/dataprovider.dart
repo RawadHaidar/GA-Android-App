@@ -8,16 +8,27 @@ class DataProvider with ChangeNotifier {
   final Map<String, WebSocketChannel> _channels = {};
   final Map<String, Timer> _heartbeatTimers = {};
   final Map<String, bool> _connectionStatus = {};
-  final Map<String, String> _latestErrorMessage =
-      {}; // Store the latest error message per IP
+  final Map<String, String> _latestErrorMessage = {};
   final Map<String, Timer> _reconnectTimers = {};
-  final Map<String, String> _ipErrors = {}; // Map to store errors for each IP
-
-  void Function(
-          String ip, double, double, double, double, double, double, String)?
-      onNewData;
+  final Map<String, String> _ipErrors = {};
+  final Map<
+      String,
+      void Function(String ip, double, double, double, double, double, double,
+          String)> _callbacks = {}; // Callbacks for each IP
 
   DataProvider();
+
+  void setDeviceCallback(
+      String ipAddress,
+      void Function(String ip, double ax, double ay, double az, double rx,
+              double ry, double rz, String serialNumber)
+          callback) {
+    _callbacks[ipAddress] = callback;
+  }
+
+  void removeCallback(String ipAddress) {
+    _callbacks.remove(ipAddress);
+  }
 
   void addIpAddress(String ipAddress) {
     if (_channels.containsKey(ipAddress)) {
@@ -29,6 +40,7 @@ class DataProvider with ChangeNotifier {
 
   void removeIpAddress(String ipAddress) {
     _disconnectWebSocket(ipAddress);
+    removeCallback(ipAddress);
   }
 
   void _connectToWebSocket(String ipAddress) {
@@ -68,6 +80,16 @@ class DataProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void _attemptReconnect(String ipAddress) {
+    _reconnectTimers[ipAddress]?.cancel();
+    _reconnectTimers[ipAddress] = Timer(const Duration(seconds: 2), () {
+      if (_channels.containsKey(ipAddress) && !_connectionStatus[ipAddress]!) {
+        logError(ipAddress, 'Reconnecting to $ipAddress...');
+        _connectToWebSocket(ipAddress);
+      }
+    });
+  }
+
   void _handleDisconnection(String ipAddress, String message) {
     _connectionStatus[ipAddress] = false;
     logError(ipAddress, message); // Log the disconnection error
@@ -79,34 +101,6 @@ class DataProvider with ChangeNotifier {
     if (_channels.containsKey(ipAddress)) {
       _attemptReconnect(ipAddress);
     }
-  }
-
-  void _attemptReconnect(String ipAddress) {
-    _reconnectTimers[ipAddress]?.cancel();
-    _reconnectTimers[ipAddress] = Timer(const Duration(seconds: 2), () {
-      if (_channels.containsKey(ipAddress) && !_connectionStatus[ipAddress]!) {
-        logError(ipAddress, 'Reconnecting to $ipAddress...');
-        _connectToWebSocket(ipAddress);
-      }
-    });
-  }
-
-  void _startHeartbeat(String ipAddress) {
-    _stopHeartbeat(ipAddress);
-    _heartbeatTimers[ipAddress] =
-        Timer.periodic(const Duration(seconds: 3), (timer) {
-      try {
-        _channels[ipAddress]?.sink.add(jsonEncode({'type': 'ping'}));
-        logError(ipAddress, 'Heartbeat sent to $ipAddress');
-      } catch (e) {
-        _handleDisconnection(ipAddress, 'Heartbeat failed: $e');
-      }
-    });
-  }
-
-  void _stopHeartbeat(String ipAddress) {
-    _heartbeatTimers[ipAddress]?.cancel();
-    _heartbeatTimers.remove(ipAddress);
   }
 
   void _updateSensorData(String ipAddress, String message) {
@@ -128,12 +122,33 @@ class DataProvider with ChangeNotifier {
           ry != null &&
           rz != null &&
           serialNumber != null) {
-        onNewData?.call(ipAddress, ax, ay, az, rx, ry, rz, serialNumber);
+        if (_callbacks.containsKey(ipAddress)) {
+          _callbacks[ipAddress]!(
+              ipAddress, ax, ay, az, rx, ry, rz, serialNumber);
+        }
       }
       logError(ipAddress, 'Sensor data received: $ax,$ay,$az,$rx,$ry,$rz');
     } catch (e) {
       logError(ipAddress, 'Error parsing sensor data: $e');
     }
+  }
+
+  void _startHeartbeat(String ipAddress) {
+    _stopHeartbeat(ipAddress);
+    _heartbeatTimers[ipAddress] =
+        Timer.periodic(const Duration(seconds: 3), (timer) {
+      try {
+        _channels[ipAddress]?.sink.add(jsonEncode({'type': 'ping'}));
+        logError(ipAddress, 'Heartbeat sent to $ipAddress');
+      } catch (e) {
+        _handleDisconnection(ipAddress, 'Heartbeat failed: $e');
+      }
+    });
+  }
+
+  void _stopHeartbeat(String ipAddress) {
+    _heartbeatTimers[ipAddress]?.cancel();
+    _heartbeatTimers.remove(ipAddress);
   }
 
   /// Log the latest error for a specific IP and print it
