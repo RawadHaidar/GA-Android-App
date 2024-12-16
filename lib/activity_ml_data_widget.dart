@@ -5,11 +5,15 @@ import 'dataprovider.dart';
 import 'ml_data_processor.dart';
 
 class ActivityMlDataWidget extends StatefulWidget {
+  const ActivityMlDataWidget({super.key});
+
   @override
   _ActivityMlDataWidgetState createState() => _ActivityMlDataWidgetState();
 }
 
 class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
+  final dataProvider = DataProvider();
+
   final MlDataProcessor _mlProcessor = MlDataProcessor();
   bool _isLoading = true;
 
@@ -109,6 +113,8 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
                 activity: activity,
               );
             } catch (e) {
+              dataProvider.setLatestError(ipAddress, e.toString());
+
               if (ipAddress == ip) {
                 setState(() {
                   _activityOutputs[index] = 'Error: $e';
@@ -149,14 +155,14 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       height: 1000,
       child: Column(
         children: [
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
           ElevatedButton(
             onPressed: _addIpContainer,
-            child: Text('Add IP Address'),
+            child: const Text('Add IP Address'),
           ),
           Expanded(
             child: ListView.builder(
@@ -168,7 +174,7 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
                     color: Colors.white,
                     child: Padding(
                       padding: const EdgeInsets.all(8.0),
-                      child: Container(
+                      child: SizedBox(
                         height: 200,
                         child: Column(
                           children: [
@@ -187,24 +193,26 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
                                   onPressed: () => _connectToIp(index),
                                   child: const Text('Connect'),
                                 ),
-                                SizedBox(width: 10),
+                                const SizedBox(width: 10),
                                 ElevatedButton(
                                   onPressed: () => _disconnectFromIp(index),
-                                  child: Text('Disconnect'),
+                                  child: const Text('Disconnect'),
                                 ),
-                                SizedBox(width: 10),
+                                const SizedBox(width: 10),
                                 ElevatedButton(
                                   onPressed: () => _removeIpContainer(index),
                                   child: const Text('Remove'),
                                 ),
                               ],
                             ),
-                            SizedBox(height: 10),
+                            const SizedBox(height: 10),
                             Text(
                               _isLoading
                                   ? 'Loading model...'
-                                  : 'Serial: ${_serialNumbers[index]}\nActivity: ${_activityOutputs[index]}',
-                              style: TextStyle(fontSize: 16),
+                                  : 'Serial: ${_serialNumbers[index]}\n'
+                                      'Activity: ${_activityOutputs[index]}\n'
+                                      'Status: ${Provider.of<DataProvider>(context).getLatestError(_ipControllers[index].text.trim())}',
+                              style: const TextStyle(fontSize: 16),
                             ),
                           ],
                         ),

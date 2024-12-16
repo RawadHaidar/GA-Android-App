@@ -5,15 +5,13 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 
 class DataProvider with ChangeNotifier {
-  final Map<String, WebSocketChannel> _channels =
-      {}; // Store WebSocket channels by IP
-  final Map<String, Timer> _heartbeatTimers =
-      {}; // Store heartbeat timers by IP
-  final Map<String, bool> _connectionStatus =
-      {}; // Track connection status by IP
-  final Map<String, String?> _errorMessages = {}; // Store error messages by IP
-  final Map<String, Timer> _reconnectTimers =
-      {}; // Store reconnect timers by IP
+  final Map<String, WebSocketChannel> _channels = {};
+  final Map<String, Timer> _heartbeatTimers = {};
+  final Map<String, bool> _connectionStatus = {};
+  final Map<String, String> _latestErrorMessage =
+      {}; // Store the latest error message per IP
+  final Map<String, Timer> _reconnectTimers = {};
+  final Map<String, String> _ipErrors = {}; // Map to store errors for each IP
 
   void Function(
           String ip, double, double, double, double, double, double, String)?
@@ -23,10 +21,9 @@ class DataProvider with ChangeNotifier {
 
   void addIpAddress(String ipAddress) {
     if (_channels.containsKey(ipAddress)) {
-      print("Already connected to $ipAddress");
+      logError(ipAddress, "Already connected to $ipAddress");
       return;
     }
-
     _connectToWebSocket(ipAddress);
   }
 
@@ -40,12 +37,14 @@ class DataProvider with ChangeNotifier {
     _channels[ipAddress] = channel;
 
     _connectionStatus[ipAddress] = false; // Initially disconnected
-    _errorMessages[ipAddress] = null;
+    _latestErrorMessage[ipAddress] =
+        ""; // Initialize the latest error message for the IP
 
     channel.stream.listen(
       (message) {
         _connectionStatus[ipAddress] = true;
-        _errorMessages[ipAddress] = null; // Clear error message on success
+        _clearLatestError(
+            ipAddress); // Clear error messages on successful connection
         _startHeartbeat(ipAddress); // Start heartbeat for this connection
         _updateSensorData(ipAddress, message);
         notifyListeners();
@@ -65,13 +64,13 @@ class DataProvider with ChangeNotifier {
     _channels[ipAddress]?.sink.close(status.goingAway);
     _channels.remove(ipAddress);
     _connectionStatus.remove(ipAddress);
-    _errorMessages.remove(ipAddress);
+    _latestErrorMessage.remove(ipAddress);
     notifyListeners();
   }
 
   void _handleDisconnection(String ipAddress, String message) {
     _connectionStatus[ipAddress] = false;
-    _errorMessages[ipAddress] = message;
+    logError(ipAddress, message); // Log the disconnection error
     notifyListeners();
 
     _stopHeartbeat(ipAddress);
@@ -80,14 +79,13 @@ class DataProvider with ChangeNotifier {
     if (_channels.containsKey(ipAddress)) {
       _attemptReconnect(ipAddress);
     }
-    print('[$ipAddress] $message');
   }
 
   void _attemptReconnect(String ipAddress) {
     _reconnectTimers[ipAddress]?.cancel();
     _reconnectTimers[ipAddress] = Timer(const Duration(seconds: 2), () {
       if (_channels.containsKey(ipAddress) && !_connectionStatus[ipAddress]!) {
-        print('Reconnecting to $ipAddress...');
+        logError(ipAddress, 'Reconnecting to $ipAddress...');
         _connectToWebSocket(ipAddress);
       }
     });
@@ -99,7 +97,7 @@ class DataProvider with ChangeNotifier {
         Timer.periodic(const Duration(seconds: 3), (timer) {
       try {
         _channels[ipAddress]?.sink.add(jsonEncode({'type': 'ping'}));
-        print('Heartbeat sent to $ipAddress');
+        logError(ipAddress, 'Heartbeat sent to $ipAddress');
       } catch (e) {
         _handleDisconnection(ipAddress, 'Heartbeat failed: $e');
       }
@@ -132,15 +130,34 @@ class DataProvider with ChangeNotifier {
           serialNumber != null) {
         onNewData?.call(ipAddress, ax, ay, az, rx, ry, rz, serialNumber);
       }
-      print('[$ipAddress] $ax,$ay,$az,$rx,$ry,$rz, Serial: $serialNumber');
+      logError(ipAddress, 'Sensor data received: $ax,$ay,$az,$rx,$ry,$rz');
     } catch (e) {
-      print('[$ipAddress] Error parsing sensor data: $e');
+      logError(ipAddress, 'Error parsing sensor data: $e');
     }
   }
 
-  bool isConnected(String ipAddress) => _connectionStatus[ipAddress] ?? false;
+  /// Log the latest error for a specific IP and print it
+  void logError(String ipAddress, String message) {
+    _latestErrorMessage[ipAddress] = message; // Store the latest error
+    print('[$ipAddress] $message');
+    setLatestError(ipAddress, message);
+  }
 
-  String? getErrorMessage(String ipAddress) => _errorMessages[ipAddress];
+  /// Clear the latest error message for a specific IP
+  void _clearLatestError(String ipAddress) {
+    _latestErrorMessage[ipAddress] = "";
+  }
+
+  void setLatestError(String ip, String error) {
+    _ipErrors[ip] = error;
+    notifyListeners();
+  }
+
+  String getLatestError(String ip) {
+    return _ipErrors[ip] ?? 'No errors';
+  }
+
+  bool isConnected(String ipAddress) => _connectionStatus[ipAddress] ?? false;
 
   @override
   void dispose() {
