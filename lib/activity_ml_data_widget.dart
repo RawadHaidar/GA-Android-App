@@ -135,12 +135,20 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
   void _disconnectFromIp(int index) {
     final ip = _ipControllers[index].text.trim();
     if (ip.isNotEmpty) {
-      Provider.of<DataProvider>(context, listen: false).removeIpAddress(ip);
+      final dataProvider = Provider.of<DataProvider>(context, listen: false);
+
+      // Remove IP from DataProvider and the registered IPs set
+      dataProvider.removeIpAddress(ip);
+      _registeredIps.remove(ip);
+
+      // Clear the buffer for the IP address
+      _deviceBuffers.remove(ip);
+
+      setState(() {
+        _serialNumbers[index] = 'N/A';
+        _activityOutputs[index] = 'Disconnected';
+      });
     }
-    setState(() {
-      _serialNumbers[index] = 'N/A';
-      _activityOutputs[index] = 'Disconnected';
-    });
   }
 
   @override

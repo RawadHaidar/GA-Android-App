@@ -61,7 +61,7 @@ class DataProvider with ChangeNotifier {
   void _disconnectWebSocket(String ipAddress) {
     _stopHeartbeat(ipAddress);
     _reconnectTimers[ipAddress]?.cancel();
-    _channels[ipAddress]?.sink.close(status.goingAway);
+    _channels[ipAddress]?.sink.close(status.normalClosure);
     _channels.remove(ipAddress);
     _connectionStatus.remove(ipAddress);
     _latestErrorMessage.remove(ipAddress);
