@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:kicare_ml_firebase_server1/observer_homepage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'observer_homepage.dart';
 
 class AuthScreen extends StatefulWidget {
   final bool isSignUp;
@@ -13,11 +15,63 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _serialNumberController = TextEditingController();
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  void _authenticate() {
-    // Perform sign-in or sign-up logic
-    // After success, navigate to ObserverHomePage
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  Future<void> _authenticate() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      if (widget.isSignUp) {
+        // Sign up
+        final UserCredential userCredential =
+            await _auth.createUserWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+
+        final user = userCredential.user;
+
+        if (user != null) {
+          // Save user data to Firestore
+          await _firestore.collection('users').doc(user.uid).set({
+            'firstName': _firstNameController.text.trim(),
+            'lastName': _lastNameController.text.trim(),
+            'email': _emailController.text.trim(),
+            'password': _passwordController.text
+                .trim(), // Not recommended to save passwords in plaintext
+          });
+        }
+
+        _navigateToHome();
+      } else {
+        // Sign in
+        await _auth.signInWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+        _navigateToHome();
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _errorMessage = e.message;
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _navigateToHome() {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -38,26 +92,55 @@ class _AuthScreenState extends State<AuthScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (widget.isSignUp)
+                TextField(
+                  controller: _firstNameController,
+                  decoration: const InputDecoration(labelText: 'First Name'),
+                ),
+              if (widget.isSignUp)
+                TextField(
+                  controller: _lastNameController,
+                  decoration: const InputDecoration(labelText: 'Last Name'),
+                ),
               TextField(
                 controller: _emailController,
                 decoration: const InputDecoration(labelText: 'Email'),
+                onChanged: (value) {
+                  if (!value.endsWith('@gaapp.com')) {
+                    final updatedText =
+                        value.split('@')[0]; // Remove any existing domain
+                    _emailController.value = TextEditingValue(
+                      text: '$updatedText@gaapp.com',
+                      selection: TextSelection.fromPosition(
+                        TextPosition(
+                            offset: updatedText
+                                .length), // Keep cursor at the correct position
+                      ),
+                    );
+                  }
+                },
               ),
               TextField(
                 controller: _passwordController,
                 decoration: const InputDecoration(labelText: 'Password'),
                 obscureText: true,
               ),
-              if (widget.isSignUp)
-                TextField(
-                  controller: _serialNumberController,
-                  decoration:
-                      const InputDecoration(labelText: 'Device Serial Number'),
-                ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _authenticate,
-                child: Text(widget.isSignUp ? 'Sign Up' : 'Sign In'),
-              ),
+              if (_isLoading)
+                const Center(child: CircularProgressIndicator())
+              else
+                ElevatedButton(
+                  onPressed: _authenticate,
+                  child: Text(widget.isSignUp ? 'Sign Up' : 'Sign In'),
+                ),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
             ],
           ),
         ),

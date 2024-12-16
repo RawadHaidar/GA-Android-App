@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:kicare_ml_firebase_server1/activity_ml_data_widget.dart';
 import 'package:kicare_ml_firebase_server1/authScreen.dart';
-import 'package:kicare_ml_firebase_server1/dataprovider.dart';
-import 'package:provider/provider.dart';
+// import 'package:kicare_ml_firebase_server1/dataprovider.dart';
+// import 'package:provider/provider.dart';
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
@@ -16,7 +16,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
-    final dataProvider = Provider.of<DataProvider>(context);
+    // final dataProvider = Provider.of<DataProvider>(context);
 
     return Scaffold(
       appBar: AppBar(

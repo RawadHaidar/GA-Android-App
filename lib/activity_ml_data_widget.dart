@@ -59,9 +59,7 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
     final ip = _ipControllers[index].text.trim();
     if (ip.isNotEmpty) {
       final dataProvider = Provider.of<DataProvider>(context, listen: false);
-      //     final firebaseDataProvider =
-      //         FirebaseDataProvider(); // Firebase provider instance
-      //     List<List<double>> sensorBuffer = [];
+
       // Check if the IP address is already registered
       if (!_registeredIps.contains(ip)) {
         _registeredIps.add(ip); // Add IP to the set
