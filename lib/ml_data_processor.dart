@@ -76,13 +76,13 @@ class MlDataProcessor {
       case 0:
         return 'laying';
       case 1:
-        return 'standing still';
+        return 'standing still/sitting';
       case 2:
         return 'walking';
       case 3:
         return 'laying down / sitting up';
       case 4:
-        return 'sitting';
+        return 'sitting/standingstill';
       case 5:
         return 'sitting down';
       case 6:
