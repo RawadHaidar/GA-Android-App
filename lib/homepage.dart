@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kicare_ml_firebase_server1/activity_ml_data_widget.dart';
-import 'package:kicare_ml_firebase_server1/authScreen.dart';
-// import 'package:kicare_ml_firebase_server1/dataprovider.dart';
-// import 'package:provider/provider.dart';
+import 'package:kicare_ml_firebase_server1/auth_screen.dart';
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
@@ -63,7 +61,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Displaying real-time data fetched from the device at the specified IP address.',
+                'Displaying real-time raw data, received from the device at the specified IP address.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.grey[700],
                     ),
@@ -78,7 +76,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   // height: 1000,
                   width: double.infinity,
                   padding: const EdgeInsets.all(16.0),
-                  child: ActivityMlDataWidget(),
+                  child: const ActivityMlDataWidget(),
                 ),
               ),
             ],

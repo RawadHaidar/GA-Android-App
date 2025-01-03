@@ -33,7 +33,7 @@ class FirebaseDataProvider {
 
       // print('Activity data for $serialNumber sent successfully.');
     } catch (e) {
-      print('Failed to send activity data: $e');
+      // print('Failed to send activity data: $e');
     }
   }
 }

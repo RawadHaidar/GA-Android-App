@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:kicare_ml_firebase_server1/ViewNotificationsPage.dart';
+import 'package:kicare_ml_firebase_server1/view_notifications_page.dart';
 
 class ObserverHomePage extends StatefulWidget {
   const ObserverHomePage({super.key});
@@ -135,7 +135,7 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-                "Type the device serial number to receive its cloud database real-time data."),
+                "Type your device serial number to get machine learning output from the cloud database."),
             Row(
               children: [
                 Expanded(

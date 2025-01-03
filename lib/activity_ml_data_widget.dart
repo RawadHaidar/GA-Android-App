@@ -3,6 +3,7 @@ import 'package:kicare_ml_firebase_server1/firebase_dataprovider.dart';
 import 'package:provider/provider.dart';
 import 'dataprovider.dart';
 import 'ml_data_processor.dart';
+import 'sensor_calibrator.dart';
 
 class ActivityMlDataWidget extends StatefulWidget {
   const ActivityMlDataWidget({super.key});
@@ -24,6 +25,8 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
   final Set<String> _registeredIps = {}; // Keep track of registered IPs
   final Map<String, List<List<double>>> _deviceBuffers =
       {}; // Buffers for each device
+
+  final calibrator = Calibrator();
   @override
   void initState() {
     super.initState();
@@ -83,7 +86,24 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
 
           // Add new sensor data to the buffer
           final buffer = _deviceBuffers[ip]!;
-          buffer.add([ax, ay, az, rx, ry, rz]);
+
+          if (serial == "111111") {
+            //calibrate sensor 111111 data before adding to the buffer
+            buffer.add(
+                [ax - 0.03, ay + 0.02, az + 0.05, rx + 0.4, ry - 2.5, rz - 25]);
+            // buffer.add([
+            //   calibrator.calibrateAx(ax),
+            //   calibrator.calibrateAy(ay),
+            //   calibrator.calibrateAz(az),
+            //   calibrator.calibrateAx(rx),
+            //   calibrator.calibrateAy(ry),
+            //   calibrator.calibrateAz(rz)
+            // ]);
+            // print(
+            //     "calibrated sesnor 111111 data: ${calibrator.calibrateAx(ax)},${calibrator.calibrateAy(ay)},${calibrator.calibrateAz(az)},${calibrator.calibrateAx(rx)},${calibrator.calibrateAy(ry)},${calibrator.calibrateAz(rz)}");
+          } else {
+            buffer.add([ax, ay, az, rx, ry, rz]);
+          }
 
           // Maintain buffer size at 6 lines
           if (buffer.length > 6) {
@@ -155,6 +175,13 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
       height: 1000,
       child: Column(
         children: [
+          const SizedBox(height: 10),
+          Text(
+            "Pess Add IP Address to add the devices connected to your Wifi network.",
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey[700],
+                ),
+          ),
           const SizedBox(height: 10),
           ElevatedButton(
             onPressed: _addIpContainer,

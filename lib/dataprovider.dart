@@ -154,7 +154,7 @@ class DataProvider with ChangeNotifier {
   /// Log the latest error for a specific IP and print it
   void logError(String ipAddress, String message) {
     _latestErrorMessage[ipAddress] = message; // Store the latest error
-    print('[$ipAddress] $message');
+    // print('[$ipAddress] $message');
     setLatestError(ipAddress, message);
   }
 
