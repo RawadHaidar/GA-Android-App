@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:kicare_ml_firebase_server1/pages/observer_homepage.dart';
 import 'package:provider/provider.dart';
 import 'package:kicare_ml_firebase_server1/dataprovider.dart';
 import 'package:kicare_ml_firebase_server1/pages/homepage.dart';
@@ -39,11 +40,14 @@ class MyApp extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.active) {
             final user = snapshot.data;
             if (user != null) {
+              return const ObserverHomePage();
+              // return const MyHomePage(
+              //     title: 'Demo Kicare App: Server Home Page');
+            } else {
               return const MyHomePage(
                   title: 'Demo Kicare App: Server Home Page');
-            } else {
-              return const AuthScreen(
-                  isSignUp: false); // Redirect to sign-in screen
+              // return const AuthScreen(
+              //     isSignUp: false); // Redirect to sign-in screen
             }
           }
 

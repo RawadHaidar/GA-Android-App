@@ -1,7 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:kicare_ml_firebase_server1/pages/auth_screen.dart';
+import 'package:kicare_ml_firebase_server1/pages/homepage.dart';
 import 'package:kicare_ml_firebase_server1/pages/view_notifications_page.dart';
 
 class ObserverHomePage extends StatefulWidget {
@@ -109,6 +112,17 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
     _previousData[serialNumber] = Map<String, dynamic>.from(data);
   }
 
+  /// Sign out the user
+  Future<void> _signOut() async {
+    await FirebaseAuth.instance.signOut();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+          builder: (context) =>
+              const MyHomePage(title: 'Adding or Removing devices')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -126,6 +140,10 @@ class _ObserverHomePageState extends State<ObserverHomePage> {
                 ),
               );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _signOut,
           ),
         ],
       ),
