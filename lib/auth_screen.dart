@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'observer_homepage.dart';
+import 'pages/observer_homepage.dart';
 
 class AuthScreen extends StatefulWidget {
   final bool isSignUp;

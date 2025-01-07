@@ -89,20 +89,23 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
 
           if (serial == "111111") {
             //calibrate sensor 111111 data before adding to the buffer
-            buffer.add(
-                [ax - 0.03, ay + 0.02, az + 0.05, rx + 0.4, ry - 2.5, rz - 25]);
-            // buffer.add([
-            //   calibrator.calibrateAx(ax),
-            //   calibrator.calibrateAy(ay),
-            //   calibrator.calibrateAz(az),
-            //   calibrator.calibrateAx(rx),
-            //   calibrator.calibrateAy(ry),
-            //   calibrator.calibrateAz(rz)
-            // ]);
-            // print(
-            //     "calibrated sesnor 111111 data: ${calibrator.calibrateAx(ax)},${calibrator.calibrateAy(ay)},${calibrator.calibrateAz(az)},${calibrator.calibrateAx(rx)},${calibrator.calibrateAy(ry)},${calibrator.calibrateAz(rz)}");
+            buffer.add([
+              ax,
+              ay,
+              az,
+              (((rx / 100) * 1000).roundToDouble()) / 1000,
+              (((ry / 100) * 1000).roundToDouble()) / 1000,
+              (((rz / 100) * 1000).roundToDouble()) / 1000
+            ]);
           } else {
-            buffer.add([ax, ay, az, rx, ry, rz]);
+            buffer.add([
+              ax,
+              ay,
+              az,
+              (((rx / 100) * 1000).roundToDouble()) / 1000,
+              (((ry / 100) * 1000).roundToDouble()) / 1000,
+              (((rz / 100) * 1000).roundToDouble()) / 1000
+            ]);
           }
 
           // Maintain buffer size at 6 lines

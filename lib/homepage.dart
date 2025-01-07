@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kicare_ml_firebase_server1/activity_ml_data_widget.dart';
-import 'package:kicare_ml_firebase_server1/auth_screen.dart';
+import 'package:kicare_ml_firebase_server1/pages/auth_screen.dart';
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
