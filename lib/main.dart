@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'package:kicare_ml_firebase_server1/dataprovider.dart';
-import 'package:kicare_ml_firebase_server1/homepage.dart';
-import 'package:kicare_ml_firebase_server1/auth_screen.dart';
+import 'package:kicare_ml_firebase_server1/pages/homepage.dart';
+import 'package:kicare_ml_firebase_server1/pages/auth_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
