@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:kicare_ml_firebase_server1/pages/auth_screen.dart';
 import 'package:kicare_ml_firebase_server1/pages/homepage.dart';
 import 'package:kicare_ml_firebase_server1/pages/view_notifications_page.dart';
 

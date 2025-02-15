@@ -60,89 +60,91 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
 
   void _connectToIp(int index) {
     final ip = _ipControllers[index].text.trim();
-    if (ip.isNotEmpty) {
-      final dataProvider = Provider.of<DataProvider>(context, listen: false);
 
-      // Check if the IP address is already registered
-      if (!_registeredIps.contains(ip)) {
-        _registeredIps.add(ip); // Add IP to the set
-        dataProvider.addIpAddress(ip); // Register IP with DataProvider
+    // Validate IP Address
+    if (!isValidIP(ip)) {
+      setState(() {
+        _activityOutputs[index] = 'Invalid IP Address';
+      });
+      return; // Stop execution if IP is invalid
+    }
 
-        // Initialize a data buffer for the device
-        _deviceBuffers[ip] = [];
-      }
+    final dataProvider = Provider.of<DataProvider>(context, listen: false);
 
-      final firebaseDataProvider =
-          FirebaseDataProvider(); // Firebase provider instance
+    // Check if the IP address is already registered
+    if (!_registeredIps.contains(ip)) {
+      _registeredIps.add(ip); // Add IP to the set
+      dataProvider.addIpAddress(ip); // Register IP with DataProvider
 
-// Set up the callback for this specific IP
-      dataProvider.setDeviceCallback(
-        ip,
-        (ip, ax, ay, az, rx, ry, rz, serial) async {
-          // Update UI with serial number
-          setState(() {
-            _serialNumbers[index] = serial;
-          });
+      // Initialize a data buffer for the device
+      _deviceBuffers[ip] = [];
+    }
 
-          // Add new sensor data to the buffer
-          final buffer = _deviceBuffers[ip]!;
+    final firebaseDataProvider =
+        FirebaseDataProvider(); // Firebase provider instance
 
-          if (serial == "111111") {
-            //calibrate sensor 111111 data before adding to the buffer
-            buffer.add([
-              ax,
-              ay,
-              az,
-              (((rx / 100) * 1000).roundToDouble()) / 1000,
-              (((ry / 100) * 1000).roundToDouble()) / 1000,
-              (((rz / 100) * 1000).roundToDouble()) / 1000
-            ]);
-          } else {
-            buffer.add([
-              ax,
-              ay,
-              az,
-              (((rx / 100) * 1000).roundToDouble()) / 1000,
-              (((ry / 100) * 1000).roundToDouble()) / 1000,
-              (((rz / 100) * 1000).roundToDouble()) / 1000
-            ]);
-          }
+    // Set up the callback for this specific IP
+    dataProvider.setDeviceCallback(
+      ip,
+      (ip, ax, ay, az, rx, ry, rz, serial) async {
+        // Update UI with serial number
+        setState(() {
+          _serialNumbers[index] = serial;
+        });
 
-          // Maintain buffer size at 6 lines
-          if (buffer.length > 6) {
-            buffer.removeAt(0); // Remove the oldest line
-          }
+        // Add new sensor data to the buffer
+        final buffer = _deviceBuffers[ip]!;
 
-          // If buffer has enough data, predict activity and send to Firestore
-          if (buffer.length == 6) {
-            try {
-              final activity = await _mlProcessor.predictActivity(buffer);
+        if (serial == "111111") {
+          // Calibrate sensor 111111 data before adding to the buffer if necessary
+          buffer.add([ax, ay, az, rx, ry, rz]);
+        } else {
+          buffer.add([ax, ay, az, rx, ry, rz]);
+        }
 
-              // Update the UI for the specific IP
-              setState(() {
-                _activityOutputs[index] = activity;
-              });
+        // Maintain buffer size at 6 lines
+        if (buffer.length > 6) {
+          buffer.removeAt(0); // Remove the oldest line
+        }
 
-              // Send activity data to Firestore
-              await firebaseDataProvider.sendActivityData(
-                serialNumber: serial,
-                activity: activity,
-              );
-            } catch (e) {
-              dataProvider.setLatestError(ip, e.toString());
-              setState(() {
-                _activityOutputs[index] = 'Error: $e';
-              });
-            }
-          } else {
-            // Collecting data message
+        // If buffer has enough data, predict activity and send to Firestore
+        if (buffer.length == 6) {
+          try {
+            final activity = await _mlProcessor.predictActivity(buffer);
+
+            // Update the UI for the specific IP
             setState(() {
-              _activityOutputs[index] = 'Collecting data...';
+              _activityOutputs[index] = activity;
+            });
+
+            // Send activity data to Firestore
+            await firebaseDataProvider.sendActivityData(
+              serialNumber: serial,
+              activity: activity,
+            );
+          } catch (e) {
+            dataProvider.setLatestError(ip, e.toString());
+            setState(() {
+              _activityOutputs[index] = 'Error: $e';
             });
           }
-        },
-      );
-    }
+        } else {
+          // Collecting data message
+          setState(() {
+            _activityOutputs[index] = 'Collecting data...';
+          });
+        }
+      },
+    );
+  }
+
+  bool isValidIP(String? ip) {
+    if (ip == null || ip.isEmpty) return false;
+
+    final regex = RegExp(
+        r'^(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)$');
+
+    return regex.hasMatch(ip);
   }
 
   void _disconnectFromIp(int index) {

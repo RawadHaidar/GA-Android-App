@@ -4,7 +4,6 @@ import 'package:kicare_ml_firebase_server1/pages/observer_homepage.dart';
 import 'package:provider/provider.dart';
 import 'package:kicare_ml_firebase_server1/dataprovider.dart';
 import 'package:kicare_ml_firebase_server1/pages/homepage.dart';
-import 'package:kicare_ml_firebase_server1/pages/auth_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
