@@ -14,25 +14,31 @@ class ActivityMlDataWidget extends StatefulWidget {
 
 class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
   final dataProvider = DataProvider();
-
-  final MlDataProcessor _mlProcessor = MlDataProcessor();
+  final Modelselectionmanager _modelselectionmanger = Modelselectionmanager();
   bool _isLoading = true;
 
   final List<TextEditingController> _ipControllers = [];
   final List<String> _serialNumbers = [];
   final List<String> _activityOutputs = [];
+  final List<String?> _selectedModels = []; // Track selected models for each IP
+  final List<String> _availableModels = ['model_1', 'model_2'];
 
-  final Set<String> _registeredIps = {}; // Keep track of registered IPs
-  final Map<String, List<List<double>>> _deviceBuffers =
-      {}; // Buffers for each device
+  final Set<String> _registeredIps = {};
+  final Map<String, List<List<double>>> _deviceBuffers = {};
 
   final calibrator = Calibrator();
+
   @override
   void initState() {
     super.initState();
-    _mlProcessor.loadModel().then((_) {
+    _modelselectionmanger.initializeDevice('model_1').then((_) {
       setState(() {
-        _isLoading = _mlProcessor.isLoading;
+        _isLoading = _modelselectionmanger.isLoading;
+      });
+    });
+    _modelselectionmanger.initializeDevice('model_2').then((_) {
+      setState(() {
+        _isLoading = _modelselectionmanger.isLoading;
       });
     });
   }
@@ -42,6 +48,7 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
       _ipControllers.add(TextEditingController());
       _serialNumbers.add('N/A');
       _activityOutputs.add('No activity detected');
+      _selectedModels.add(null); // Initially no model selected
     });
   }
 
@@ -55,96 +62,75 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
       _ipControllers.removeAt(index);
       _serialNumbers.removeAt(index);
       _activityOutputs.removeAt(index);
+      _selectedModels.removeAt(index);
     });
   }
 
   void _connectToIp(int index) {
     final ip = _ipControllers[index].text.trim();
+    final selectedModel = _selectedModels[index];
 
     // Validate IP Address
     if (!isValidIP(ip)) {
       setState(() {
         _activityOutputs[index] = 'Invalid IP Address';
       });
-      return; // Stop execution if IP is invalid
+      return;
+    }
+
+    if (selectedModel == null) {
+      setState(() {
+        _activityOutputs[index] = 'ML model not selected';
+      });
+      return;
     }
 
     final dataProvider = Provider.of<DataProvider>(context, listen: false);
 
     // Check if the IP address is already registered
     if (!_registeredIps.contains(ip)) {
-      _registeredIps.add(ip); // Add IP to the set
-      dataProvider.addIpAddress(ip); // Register IP with DataProvider
-
-      // Initialize a data buffer for the device
+      _registeredIps.add(ip);
+      dataProvider.addIpAddress(ip);
       _deviceBuffers[ip] = [];
     }
 
-    final firebaseDataProvider =
-        FirebaseDataProvider(); // Firebase provider instance
+    final firebaseDataProvider = FirebaseDataProvider();
 
-    // Set up the callback for this specific IP
-    dataProvider.setDeviceCallback(
-      ip,
-      (ip, ax, ay, az, rx, ry, rz, serial) async {
-        // Update UI with serial number
-        setState(() {
-          _serialNumbers[index] = serial;
-        });
+    dataProvider.setDeviceCallback(ip,
+        (ip, ax, ay, az, rx, ry, rz, serial) async {
+      setState(() {
+        _serialNumbers[index] = serial;
+      });
 
-        // Add new sensor data to the buffer
-        final buffer = _deviceBuffers[ip]!;
+      final buffer = _deviceBuffers[ip]!;
+      buffer.add([ax, ay, az, rx, ry, rz]);
 
-        if (serial == "111111") {
-          // Calibrate sensor 111111 data before adding to the buffer if necessary
-          buffer.add([ax, ay, az, rx, ry, rz]);
-        } else {
-          buffer.add([ax, ay, az, rx, ry, rz]);
-        }
+      if (buffer.length > 6) buffer.removeAt(0);
 
-        // Maintain buffer size at 6 lines
-        if (buffer.length > 6) {
-          buffer.removeAt(0); // Remove the oldest line
-        }
-
-        // If buffer has enough data, predict activity and send to Firestore
-        if (buffer.length == 6) {
-          try {
-            final activity = await _mlProcessor.predictActivity(buffer);
-
-            // Update the UI for the specific IP
-            setState(() {
-              _activityOutputs[index] = activity;
-            });
-
-            // Send activity data to Firestore
-            await firebaseDataProvider.sendActivityData(
-              serialNumber: serial,
-              activity: activity,
-            );
-          } catch (e) {
-            dataProvider.setLatestError(ip, e.toString());
-            setState(() {
-              _activityOutputs[index] = 'Error: $e';
-            });
-          }
-        } else {
-          // Collecting data message
+      if (buffer.length == 6) {
+        try {
+          String activity = await _modelselectionmanger.processDeviceData(
+              selectedModel, buffer);
           setState(() {
-            _activityOutputs[index] = 'Collecting data...';
+            _activityOutputs[index] = activity;
+          });
+
+          await firebaseDataProvider.sendActivityData(
+            serialNumber: serial,
+            activity: activity,
+          );
+        } catch (e) {
+          dataProvider.setLatestError(ip, e.toString());
+          setState(() {
+            _activityOutputs[index] = 'Error: $e';
           });
         }
-      },
-    );
-  }
-
-  bool isValidIP(String? ip) {
-    if (ip == null || ip.isEmpty) return false;
-
-    final regex = RegExp(
-        r'^(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)$');
-
-    return regex.hasMatch(ip);
+      } else {
+        setState(() {
+          _activityOutputs[index] = 'Collecting data...';
+        });
+      }
+    });
   }
 
   void _disconnectFromIp(int index) {
@@ -166,6 +152,13 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
     }
   }
 
+  bool isValidIP(String? ip) {
+    if (ip == null || ip.isEmpty) return false;
+    final regex = RegExp(
+        r'^(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)$');
+    return regex.hasMatch(ip);
+  }
+
   @override
   void dispose() {
     for (var controller in _ipControllers) {
@@ -182,7 +175,7 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
         children: [
           const SizedBox(height: 10),
           Text(
-            "Pess Add IP Address to add the devices connected to your Wifi network.",
+            "Press Add IP Address to add the devices connected to your Wi-Fi network.",
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Colors.grey[700],
                 ),
@@ -194,6 +187,9 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
           ),
           Expanded(
             child: ListView.builder(
+              shrinkWrap: true,
+              physics:
+                  const BouncingScrollPhysics(), // Optional, better scrolling effect
               itemCount: _ipControllers.length,
               itemBuilder: (context, index) {
                 return Padding(
@@ -203,7 +199,7 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
                     child: Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: SizedBox(
-                        height: 200,
+                        height: 280,
                         child: Column(
                           children: [
                             TextField(
@@ -213,6 +209,22 @@ class _ActivityMlDataWidgetState extends State<ActivityMlDataWidget> {
                                 labelText: 'Enter IP Address',
                                 border: OutlineInputBorder(),
                               ),
+                            ),
+                            const SizedBox(height: 10),
+                            DropdownButton<String>(
+                              value: _selectedModels[index],
+                              hint: const Text('Select Model'),
+                              items: _availableModels.map((model) {
+                                return DropdownMenuItem(
+                                  value: model,
+                                  child: Text(model),
+                                );
+                              }).toList(),
+                              onChanged: (model) {
+                                setState(() {
+                                  _selectedModels[index] = model;
+                                });
+                              },
                             ),
                             const SizedBox(height: 10),
                             Row(

@@ -3,15 +3,16 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 class MlDataProcessor {
   Interpreter? _interpreter;
   bool isLoading = true;
+  String _currentState = 'sitting'; // Initial state
+  final String modelPath;
+  final List<double> mean;
+  final List<double> stdDev;
 
-  MlDataProcessor() {
-    loadModel();
-  }
+  MlDataProcessor(this.modelPath, this.mean, this.stdDev);
 
   Future<void> loadModel() async {
     try {
-      _interpreter = await Interpreter.fromAsset(
-          'assets/models/activity_fall_combined_model.tflite');
+      _interpreter = await Interpreter.fromAsset(modelPath);
       isLoading = false;
     } catch (e) {
       isLoading = false;
@@ -21,80 +22,131 @@ class MlDataProcessor {
 
   void dispose() {
     _interpreter?.close();
+    _interpreter = null;
   }
 
   Future<String> predictActivity(List<List<double>> inputBuffer) async {
+    if (isLoading) {
+      throw Exception('Model is still loading');
+    }
     if (_interpreter == null) {
       throw Exception('Interpreter is not initialized');
     }
 
-    var input = [inputBuffer];
-    var mean = [
-      0.20843079922027016,
-      0.7102306692657564,
-      0.249322070608623,
-      65.94978124323104,
-      37.685719081654824,
-      21.447627247130217
-    ];
-    var stdDev = [
-      0.26626532547848913,
-      0.37681720681319597,
-      0.38741141730125095,
-      43.94066655893264,
-      59.36033325058816,
-      41.2216565065153
-    ];
-
-    var scaledInput = input.map((batch) {
-      return batch.map((features) {
-        return List<double>.generate(features.length, (index) {
-          return (features[index] - mean[index]) / stdDev[index];
-        }).toList();
-      }).toList();
+    List<List<double>> scaledInput = inputBuffer.map((features) {
+      return List<double>.generate(features.length, (index) {
+        return (features[index] - mean[index]) / stdDev[index];
+      });
     }).toList();
 
     var output = List<List<double>>.filled(1, List<double>.filled(10, 0.0));
 
-    _interpreter!.run(scaledInput, output);
+    _interpreter!.run([scaledInput], output);
 
-    var rawOutput = output[0];
-    var predictedClass = rawOutput
+    int predictedClass = output[0]
         .asMap()
         .entries
-        .fold<MapEntry<int, double>>(
-          MapEntry(0, rawOutput[0]),
-          (current, entry) => entry.value > current.value ? entry : current,
-        )
+        .reduce((a, b) => a.value > b.value ? a : b)
         .key;
 
-    return _mapClassToActivity(predictedClass);
+    _currentState = _mapClassToActivity(predictedClass);
+    return _currentState;
   }
 
   String _mapClassToActivity(int predictedClass) {
-    switch (predictedClass) {
-      case 0:
-        return 'laying';
-      case 1:
-        return 'standing still/sitting';
-      case 2:
-        return 'walking';
-      case 3:
-        return 'laying down / sitting up';
-      case 4:
-        return 'sitting/standingstill';
-      case 5:
-        return 'sitting down';
-      case 6:
-        return 'standing up';
-      case 7:
-        return 'fall detected';
-      case 8:
-        return 'fall prediction';
-      case 9:
-        return 'walk deterioration';
-      default:
-        return 'unknown';
+    const activityLabels = [
+      'laying',
+      'still',
+      'walking',
+      'laying down / sitting up',
+      'still',
+      'sitting down / standing up',
+      'standing up / sitting down',
+      'fall detected',
+      'fall prediction',
+      'walk deterioration'
+    ];
+    return (predictedClass >= 0 && predictedClass < activityLabels.length)
+        ? activityLabels[predictedClass]
+        : 'unknown';
+  }
+}
+
+class Modelselectionmanager {
+  bool isLoading = true;
+  final Map<String, Map<String, dynamic>> deviceModelData = {
+    'model_1': {
+      'model': 'assets/models/activity_fall_combined_model.tflite',
+      'mean': [
+        0.2015291890814896,
+        0.719958158995818,
+        0.2616696553098246,
+        65.63354054592496,
+        36.54647937836233,
+        20.01634389320581
+      ],
+      'stdDev': [
+        0.25828403406752537,
+        0.36099552727694995,
+        0.37921567012022867,
+        42.49111799476216,
+        58.032751888648,
+        39.98127215053988
+      ]
+    },
+    'model_2': {
+      'model': 'assets/models/activity_fall_combined_model2.tflite',
+      'mean': [
+        0.18720415288496897,
+        0.7256560088202892,
+        0.27599595736861604,
+        64.86237412715849,
+        32.95182561558256,
+        18.546107129731652
+      ],
+      'stdDev': [
+        0.2593020666639833,
+        0.3453140419777503,
+        0.3697760608186425,
+        41.50147720418859,
+        57.662724203360646,
+        38.530510507191636
+      ]
     }
+  };
+
+  final Map<String, MlDataProcessor> deviceProcessors = {};
+
+  Future<void> initializeDevice(String deviceId) async {
+    if (deviceModelData.containsKey(deviceId)) {
+      var data = deviceModelData[deviceId]!;
+      deviceProcessors[deviceId]
+          ?.dispose(); // Dispose previous instance if exists
+      var processor = MlDataProcessor(
+        data['model'],
+        List<double>.from(data['mean']),
+        List<double>.from(data['stdDev']),
+      );
+      deviceProcessors[deviceId] = processor;
+      await processor.loadModel(); // Ensure model is loaded before use
+      isLoading = false;
+    } else {
+      throw Exception('No model assigned to device: $deviceId');
+    }
+  }
+
+  Future<String> processDeviceData(
+      String deviceId, List<List<double>> inputData) async {
+    if (!deviceProcessors.containsKey(deviceId)) {
+      throw Exception('Device not initialized: $deviceId');
+    }
+    return await deviceProcessors[deviceId]!.predictActivity(inputData);
+  }
+
+  void disposeAll() {
+    for (var processor in deviceProcessors.values) {
+      processor.dispose();
+    }
+    deviceProcessors.clear();
   }
 }
